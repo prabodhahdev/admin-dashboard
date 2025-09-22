@@ -10,3 +10,5 @@ build/
 # OS files
 .DS_Store
 Thumbs.db
+
+backend/firebase/serviceAccount.json

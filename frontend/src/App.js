@@ -1,24 +1,43 @@
-import logo from './logo.svg';
+// App.js
 import './App.css';
+import ActionHandler from './pages/user/ActionHandler';
+import RegisterPage from './pages/user/RegisterPage';
+import ForgotPassword from './components/auth/ForgotPassword';
+import LoginPage from './pages/user/LoginPage';
+import { Routes, Route } from 'react-router-dom'; // remove Router import
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import ResetPasswordPage from './pages/user/ResetPasswordPage';
+import UserDashboardPage from './pages/user/UserDashboardPage';
+import SuperAdminPage from './pages/admin/SuperAdminPage';
+import ProtectedRoute from './routes/ProtectedRoute';
+import ManageUserPage from './pages/admin/ManageUserPage';
+import ManageRolesPage from './pages/admin/ManageRolesPage';
 
 function App() {
   return (
-    <div className="App">
-      <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p>
-          Edit <code>src/App.js</code> and save to reload.
-        </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
-      </header>
-    </div>
+    <>
+      <Routes>
+        <Route path="/" element={<LoginPage />} />
+        <Route path="/action" element={<ActionHandler />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/forgot-password" element={<ForgotPassword />} />
+        <Route path="/user-dashboard" element={<UserDashboardPage/>} />
+
+        {/* SuperAdmin Dashboard with nested routes */}
+        <Route path="/superadmin-dashboard" element={
+          <ProtectedRoute allowedRoles={['superadmin']}>
+            <SuperAdminPage />
+          </ProtectedRoute>
+        }>
+          <Route path="manage-users" element={<ManageUserPage />} />
+          <Route path="manage-roles" element={<ManageRolesPage />} />
+        </Route>
+      </Routes>
+
+      <ToastContainer position="top-right" autoClose={3000} />
+    </>
   );
 }
 
