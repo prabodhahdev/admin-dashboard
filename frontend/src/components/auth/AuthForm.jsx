@@ -52,8 +52,8 @@ const AuthForm = ({ mode }) => {
   // Redirect based on role
   const redirectBasedOnRole = (role) => {
     if (role === "superadmin") navigate("/superadmin-dashboard");
-    else if (role === "admin") navigate("/admin-dashboard");
-    else navigate("/user-dashboard");
+    // else if (role === "admin") navigate("/admin-dashboard");
+    else navigate("/dashboard");
   };
 
   const API_URL = process.env.REACT_APP_API_URL;

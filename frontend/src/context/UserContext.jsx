@@ -55,33 +55,41 @@ export const UserProvider = ({ children }) => {
   };
 
   // Fetch current user
-const fetchCurrentUser = async (uid) => {
-  try {
-    console.log("Fetching current user with UID:", uid); // 🔹 log UID
+  const fetchCurrentUser = async (uid) => {
+    try {
+      console.log("Fetching current user with UID:", uid); // 🔹 log UID
 
-    const res = await axios.get(`${API_URL}/users/${uid}`);
-    const user = res.data;
-    console.log("Fetched current user:", user); // 🔹 log result
+      const res = await axios.get(`${API_URL}/users/${uid}`);
+      const user = res.data;
+      console.log("Fetched current user:", user); // 🔹 log result
 
-    // Ensure role and permissions exist
-    const role = user.role || { roleName: "user", permissions: {} };
-    setCurrentUser({ ...user, role, permissions: role.permissions || {} });
+      // // Ensure role and permissions exist
+      // const role = user.role || { roleName: "user", permissions: {} };
+      // setCurrentUser({ ...user, role, permissions: role.permissions || {} });
+//-----------------------------------
+      // Ensure role and permissions exist
+      const role = user.role || { roleName: "user", permissions: {} };
+      const permissions = role.permissions || {};
 
-    // Fetch all users if current user can manage users
-    if (role.permissions.manageUsers) {
-      await fetchUsers();
+      setCurrentUser({
+        ...user,
+        role,
+        permissions, // 🔹 flatten so you can access directly
+      });
+//--------------------------------------
+      // Fetch all users if current user can manage users
+      if (role.permissions.manageUsers) {
+        await fetchUsers();
+      }
+
+      await fetchRoles();
+    } catch (err) {
+      console.error("Error fetching current user:", err);
+      setCurrentUser(null);
+    } finally {
+      setLoading(false);
     }
-
-    await fetchRoles();
-  } catch (err) {
-    console.error("Error fetching current user:", err);
-    setCurrentUser(null);
-  } finally {
-    setLoading(false);
-  }
-};
-
-
+  };
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {

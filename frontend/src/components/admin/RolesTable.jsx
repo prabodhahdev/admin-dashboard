@@ -1,19 +1,41 @@
 // src/components/admin/RolesTable.jsx
 import React, { useState, useEffect } from "react";
 import { PencilIcon, TrashIcon, UserPlusIcon, MagnifyingGlassIcon } from "@heroicons/react/24/solid";
-import AddRole from "./AddRole"; // your AddRole modal component
+import AddRole from "./AddRole"; 
+import { toast } from "react-toastify";
 
 const TABLE_HEAD = ["Role Name", "Description", "Permissions", "Actions"];
 
 const RolesTable = () => {
   const [roles, setRoles] = useState([]);
   const [search, setSearch] = useState("");
-  const [isAddRoleOpen, setIsAddRoleOpen] = useState(false);
+  const [modalRole, setModalRole] = useState(false); 
+
+  const API_URL = "http://localhost:5000/api/roles";
+
+  // Delete role
+  const handleDeleteClick = async (roleId) => {
+    if (!window.confirm("Are you sure you want to delete this role?")) return;
+
+    try {
+      const res = await fetch(`${API_URL}/${roleId}`, { method: "DELETE" });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to delete role");
+      }
+
+      setRoles(prev => prev.filter(r => r._id !== roleId));
+      toast.success("Role deleted successfully!");
+    } catch (err) {
+      console.error("Error deleting role:", err);
+      toast.error("Error deleting role: " + err.message);
+    }
+  };
 
   // Fetch roles
   const fetchRoles = async () => {
     try {
-      const res = await fetch("http://localhost:5000/api/roles");
+      const res = await fetch(API_URL);
       const data = await res.json();
       setRoles(data);
     } catch (err) {
@@ -45,7 +67,7 @@ const RolesTable = () => {
         {/* Add Role Button */}
         <button
           className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 text-sm"
-          onClick={() => setIsAddRoleOpen(true)}
+          onClick={() => setModalRole(null)} 
         >
           <UserPlusIcon className="h-5 w-5" /> Add Role
         </button>
@@ -93,10 +115,19 @@ const RolesTable = () => {
                     : "-"}
                 </td>
                 <td className="p-2 sm:p-3 flex gap-2">
-                  <button className="text-gray-500 hover:text-gray-700">
+                  {/* Edit Role */}
+                  <button
+                    className="text-gray-500 hover:text-gray-700"
+                    onClick={() => setModalRole(role)} // edit mode
+                  >
                     <PencilIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   </button>
-                  <button className="text-red-500 hover:text-red-700">
+
+                  {/* Delete Role */}
+                  <button
+                    className="text-red-500 hover:text-red-700"
+                    onClick={() => handleDeleteClick(role._id)}
+                  >
                     <TrashIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   </button>
                 </td>
@@ -106,13 +137,14 @@ const RolesTable = () => {
         </table>
       </div>
 
-      {/* Add Role Modal */}
-      {isAddRoleOpen && (
+      {/* Add/Edit Role Modal */}
+      {modalRole !== false && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/30 z-50">
           <AddRole
+            roleToEdit={modalRole}
             closeModal={() => {
-              setIsAddRoleOpen(false);
-              fetchRoles(); // refresh roles after adding
+              setModalRole(false);
+              fetchRoles(); 
             }}
           />
         </div>

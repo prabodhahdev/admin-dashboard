@@ -2,7 +2,7 @@
 import mongoose from "mongoose";
 
 const roleSchema = new mongoose.Schema({
-  roleName: { type: String, required: true, unique: true }, // e.g., superadmin, admin
+  roleName: { type: String, required: true, unique: true ,lowercase: true }, 
   description: { type: String },
   permissions: {
     manageUsers: { type: Boolean, default: false },

@@ -5,26 +5,39 @@ import admin from "../firebase/admin.js";
 // Create User
 export const createUser = async (req, res) => {
   try {
-    const { uid: providedUid, firstName, lastName, email, phone, roleName, profilePic } = req.body;
+    const {
+      uid: providedUid,
+      firstName,
+      lastName,
+      email,
+      phone,
+      roleName,
+      profilePic,
+    } = req.body;
 
     if (!firstName || !lastName || !email) {
-      return res.status(400).json({ error: "First name, last name, and email are required" });
+      return res
+        .status(400)
+        .json({ error: "First name, last name, and email are required" });
     }
 
     //  Check duplicates
-    const existingUser = await User.findOne({ $or: [{ email }, { uid: providedUid }] });
+    const existingUser = await User.findOne({
+      $or: [{ email }, { uid: providedUid }],
+    });
     if (existingUser) {
-      return res.status(400).json({ error: "User already exists with this email or UID" });
+      return res
+        .status(400)
+        .json({ error: "User already exists with this email or UID" });
     }
 
     //  Find or create role
     let role = await Role.findOne({ roleName: roleName.toLowerCase().trim() });
+
     if (!role) {
-      role = new Role({
-        roleName: roleName.toLowerCase().trim(),
-        permissions: { manageUsers: false, manageRoles: false },
-      });
-      await role.save();
+      return res
+        .status(400)
+        .json({ error: `Role "${roleName}" does not exist.` });
     }
 
     //  Determine Firebase UID
@@ -38,16 +51,23 @@ export const createUser = async (req, res) => {
         disabled: false,
       };
 
-      if (phone && /^\+\d{10,15}$/.test(phone)) createParams.phoneNumber = phone;
-      if (profilePic && /^https?:\/\//i.test(profilePic)) createParams.photoURL = profilePic;
+      if (phone && /^\+\d{10,15}$/.test(phone))
+        createParams.phoneNumber = phone;
+      if (profilePic && /^https?:\/\//i.test(profilePic))
+        createParams.photoURL = profilePic;
 
       const firebaseUser = await admin.auth().createUser(createParams);
       uidToUse = firebaseUser.uid;
     } else {
       try {
         const existing = await admin.auth().getUser(uidToUse);
-        if (existing.email && existing.email.toLowerCase() !== email.toLowerCase()) {
-          return res.status(400).json({ error: "Provided UID does not match email" });
+        if (
+          existing.email &&
+          existing.email.toLowerCase() !== email.toLowerCase()
+        ) {
+          return res
+            .status(400)
+            .json({ error: "Provided UID does not match email" });
         }
       } catch {
         return res.status(400).json({ error: "Invalid provided UID" });
@@ -66,15 +86,21 @@ export const createUser = async (req, res) => {
     });
 
     await newUser.save();
-    const populatedUser = await User.findById(newUser._id).populate("role", "roleName permissions");
+    const populatedUser = await User.findById(newUser._id).populate(
+      "role",
+      "roleName permissions"
+    );
 
-    res.status(201).json({ message: "User created successfully", user: populatedUser });
+    res
+      .status(201)
+      .json({ message: "User created successfully", user: populatedUser });
   } catch (err) {
     console.error("Error creating user:", err);
-    res.status(500).json({ error: err.message, code: err.code || "SERVER_ERROR" });
+    res
+      .status(500)
+      .json({ error: err.message, code: err.code || "SERVER_ERROR" });
   }
 };
-
 
 // Get user by UID
 export const getUserByUid = async (req, res) => {
@@ -109,7 +135,10 @@ export const getUsers = async (req, res) => {
 export const getUserByEmail = async (req, res) => {
   try {
     const { email } = req.params;
-    const user = await User.findOne({ email }).populate("role", "roleName permissions");
+    const user = await User.findOne({ email }).populate(
+      "role",
+      "roleName permissions"
+    );
 
     if (!user) return res.status(404).json({ error: "User not found" });
 
@@ -168,8 +197,14 @@ export const updateUser = async (req, res) => {
     }
 
     //  Whitelist allowed fields to prevent unsafe updates
-    const allowedUpdates = ["firstName", "lastName", "phone", "profilePic", "role"];
-    Object.keys(updates).forEach(key => {
+    const allowedUpdates = [
+      "firstName",
+      "lastName",
+      "phone",
+      "profilePic",
+      "role",
+    ];
+    Object.keys(updates).forEach((key) => {
       if (allowedUpdates.includes(key)) {
         user[key] = updates[key];
       }
@@ -177,14 +212,18 @@ export const updateUser = async (req, res) => {
 
     await user.save();
 
-    const updatedUser = await User.findById(user._id).populate("role", "roleName permissions");
+    const updatedUser = await User.findById(user._id).populate(
+      "role",
+      "roleName permissions"
+    );
     res.json({ message: "User updated successfully", user: updatedUser });
   } catch (err) {
     console.error("Error updating user:", err);
-    res.status(500).json({ error: err.message, code: err.code || "SERVER_ERROR" });
+    res
+      .status(500)
+      .json({ error: err.message, code: err.code || "SERVER_ERROR" });
   }
 };
-
 
 // Delete user
 export const deleteUser = async (req, res) => {
@@ -202,7 +241,12 @@ export const deleteUser = async (req, res) => {
     } catch (firebaseErr) {
       console.error("Error deleting Firebase user:", firebaseErr);
       // Optionally, continue deleting in MongoDB even if Firebase fails
-      return res.status(500).json({ error: "Failed to delete user in Firebase", details: firebaseErr.message });
+      return res
+        .status(500)
+        .json({
+          error: "Failed to delete user in Firebase",
+          details: firebaseErr.message,
+        });
     }
 
     // 3️ Delete user in MongoDB
@@ -212,6 +256,8 @@ export const deleteUser = async (req, res) => {
     res.json({ message: "User deleted successfully" });
   } catch (err) {
     console.error("Error deleting user:", err);
-    res.status(500).json({ error: err.message, code: err.code || "SERVER_ERROR" });
+    res
+      .status(500)
+      .json({ error: err.message, code: err.code || "SERVER_ERROR" });
   }
 };
