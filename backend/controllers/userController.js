@@ -184,3 +184,34 @@ export const updateUser = async (req, res) => {
     res.status(500).json({ error: err.message, code: err.code || "SERVER_ERROR" });
   }
 };
+
+
+// Delete user
+export const deleteUser = async (req, res) => {
+  try {
+    const { uid } = req.params;
+
+    // 1️ Find the user in MongoDB
+    const user = await User.findOne({ uid });
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // 2️ Delete user in Firebase
+    try {
+      await admin.auth().deleteUser(uid);
+      console.log("Firebase user deleted:", uid);
+    } catch (firebaseErr) {
+      console.error("Error deleting Firebase user:", firebaseErr);
+      // Optionally, continue deleting in MongoDB even if Firebase fails
+      return res.status(500).json({ error: "Failed to delete user in Firebase", details: firebaseErr.message });
+    }
+
+    // 3️ Delete user in MongoDB
+    await User.deleteOne({ uid });
+    console.log("MongoDB user deleted:", uid);
+
+    res.json({ message: "User deleted successfully" });
+  } catch (err) {
+    console.error("Error deleting user:", err);
+    res.status(500).json({ error: err.message, code: err.code || "SERVER_ERROR" });
+  }
+};

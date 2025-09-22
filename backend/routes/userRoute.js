@@ -1,6 +1,6 @@
 // backend/routes/userRoute.js
 import express from "express";
-import { createUser, getUsers, getUserByEmail, getUserByUid, resetFailedAttempts, updateUser } from "../controllers/userController.js";
+import { createUser, getUsers, getUserByEmail, getUserByUid, resetFailedAttempts, updateUser, deleteUser } from "../controllers/userController.js";
 
 const router = express.Router();
 
@@ -10,6 +10,7 @@ router.get("/email/:email", getUserByEmail); // this is for forgot password hand
 router.put("/:uid/resetAttempts", resetFailedAttempts);
 router.get("/:uid", getUserByUid);
 router.put("/:uid", updateUser);
+router.delete("/:uid", deleteUser);
 
 
 export default router;
