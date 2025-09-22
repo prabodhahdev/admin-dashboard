@@ -6,7 +6,7 @@ import "react-toastify/dist/ReactToastify.css";
 import { sendPasswordResetEmail, getAuth } from "firebase/auth";
 import { useUser } from "../../context/UserContext";
 
-const AddUser = ({ closeModal, onUserAdded }) => {
+const AddUser = ({ closeModal, userToEdit }) => {
   const { setUsers } = useUser();
 
   const [profilePic, setProfilePic] = useState(null);
@@ -22,6 +22,7 @@ const AddUser = ({ closeModal, onUserAdded }) => {
 
   const roleLabels = { user: "User", admin: "Admin", superadmin: "Super Admin" };
 
+  // Validation
   const validateField = (name, value) => {
     let error = "";
     switch (name) {
@@ -48,10 +49,11 @@ const AddUser = ({ closeModal, onUserAdded }) => {
     return error === "";
   };
 
+  // Handle profile pic upload
   const handleFileChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const MAX_SIZE_MB = 2; // guard to avoid 413s
+    const MAX_SIZE_MB = 2;
     if (file.size > MAX_SIZE_MB * 1024 * 1024) {
       toast.error(`Image too large. Max ${MAX_SIZE_MB}MB`);
       return;
@@ -61,6 +63,7 @@ const AddUser = ({ closeModal, onUserAdded }) => {
     reader.readAsDataURL(file);
   };
 
+  // Reset form
   const resetForm = () => {
     setFirstName("");
     setLastName("");
@@ -72,6 +75,7 @@ const AddUser = ({ closeModal, onUserAdded }) => {
     setRole(roles[0]?.roleName || "user");
   };
 
+  // Fetch roles
   useEffect(() => {
     const fetchRoles = async () => {
       try {
@@ -87,12 +91,27 @@ const AddUser = ({ closeModal, onUserAdded }) => {
     fetchRoles();
   }, []);
 
+  // Populate form if editing
+  useEffect(() => {
+    if (userToEdit) {
+      setFirstName(userToEdit.firstName);
+      setLastName(userToEdit.lastName);
+      setEmail(userToEdit.email);
+      setPhone(userToEdit.phone);
+      setProfilePic(userToEdit.profilePic || null);
+      setRole(userToEdit.role?.roleName || "user");
+      setPassword(""); // password optional
+    }
+  }, [userToEdit]);
+
+  // Generate random password
   const generatePassword = () => {
     const randomPass = Math.random().toString(36).slice(-10) + "Aa1!";
     setPassword(randomPass);
     validateField("password", randomPass);
   };
 
+  // Submit handler
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -101,7 +120,7 @@ const AddUser = ({ closeModal, onUserAdded }) => {
       validateField("lastName", lastName) &&
       validateField("email", email) &&
       validateField("phone", phone) &&
-      validateField("password", password);
+      (userToEdit ? true : validateField("password", password)); // password required only for new user
 
     if (!isValid) {
       toast.error("Please fix errors before submitting.");
@@ -109,39 +128,39 @@ const AddUser = ({ closeModal, onUserAdded }) => {
     }
 
     try {
-      const res = await fetch("http://localhost:5000/api/users", {
-        method: "POST",
+      const url = userToEdit
+        ? `http://localhost:5000/api/users/${userToEdit.uid}`
+        : "http://localhost:5000/api/users";
+
+      const method = userToEdit ? "PUT" : "POST";
+
+      const bodyData = userToEdit
+        ? { firstName, lastName, phone, profilePic, roleName: role }
+        : { firstName, lastName, email, phone, password, roleName: role, profilePic };
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, email, phone, roleName: role, profilePic }),
+        body: JSON.stringify(bodyData),
       });
 
-      let data;
-      if (!res.ok) {
-        // Try parse JSON; if fails, read as text
-        try {
-          const errorData = await res.json();
-          throw new Error(errorData.error || "Failed to save user");
-        } catch (_) {
-          const text = await res.text();
-          throw new Error(text || "Failed to save user");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Operation failed");
+
+      setUsers(prev => {
+        if (userToEdit) {
+          return prev.map(u => (u.uid === userToEdit.uid ? data.user : u));
+        } else {
+          return [data.user, ...prev];
         }
-      } else {
-        try {
-          data = await res.json();
-        } catch (_) {
-          const text = await res.text();
-          throw new Error(text || "Invalid server response");
-        }
+      });
+
+      if (!userToEdit) {
+        const auth = getAuth();
+        await sendPasswordResetEmail(auth, email);
       }
-      const createdUser = data.user;
 
-      // ✅ Update users list directly in context
-      setUsers(prev => [createdUser, ...prev]);
-
-      const auth = getAuth();
-      await sendPasswordResetEmail(auth, email);
-
-      toast.success("User added & email sent!");
+      toast.success(userToEdit ? "User updated!" : "User added & email sent!");
       resetForm();
       if (closeModal) closeModal();
     } catch (error) {
@@ -153,15 +172,19 @@ const AddUser = ({ closeModal, onUserAdded }) => {
   return (
     <div className="w-full max-w-3xl p-8 bg-white rounded-lg relative">
 
+      {/* Close Button */}
       <button
-    onClick={closeModal}
-    className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
-  >
-    <XMarkIcon className="w-6 h-6" />
-  </button>
+        onClick={closeModal}
+        className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
+      >
+        <XMarkIcon className="w-6 h-6" />
+      </button>
 
-      <h2 className="text-lg sm:text-xl font-semibold text-gray-500 mb-5">Add New User</h2>
+      <h2 className="text-lg sm:text-xl font-semibold text-gray-500 mb-5">
+        {userToEdit ? "Edit User" : "Add New User"}
+      </h2>
 
+      {/* Profile Picture */}
       <div className="flex items-center gap-4 mb-6">
         <img
           src={profilePic || "https://www.w3schools.com/howto/img_avatar.png"}
@@ -174,7 +197,9 @@ const AddUser = ({ closeModal, onUserAdded }) => {
         </label>
       </div>
 
+      {/* Form */}
       <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={handleSubmit}>
+
         {/* First Name */}
         <div className="flex flex-col">
           <label className="text-sm font-medium text-gray-600 mb-1">First Name</label>
@@ -208,7 +233,7 @@ const AddUser = ({ closeModal, onUserAdded }) => {
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            onBlur={(e) => validateField("email", e.target.value)}
+            disabled={!!userToEdit} // prevent editing email
             className={`border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none ${errors.email ? "border-red-500" : ""}`}
           />
           {errors.email && <span className="text-red-500 text-sm">{errors.email}</span>}
@@ -227,25 +252,27 @@ const AddUser = ({ closeModal, onUserAdded }) => {
           {errors.phone && <span className="text-red-500 text-sm">{errors.phone}</span>}
         </div>
 
-        {/* Password */}
-        <div className="flex flex-col col-span-1 md:col-span-2">
-          <label className="text-sm font-medium text-gray-600 mb-1">Password</label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => { setPassword(e.target.value); validateField("password", e.target.value); }}
-                className={`w-full border rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-indigo-400 outline-none ${errors.password ? "border-red-500" : ""}`}
-              />
-              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700">
-                {showPassword ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
-              </button>
+        {/* Password (only for new users) */}
+        {!userToEdit && (
+          <div className="flex flex-col col-span-1 md:col-span-2">
+            <label className="text-sm font-medium text-gray-600 mb-1">Password</label>
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => { setPassword(e.target.value); validateField("password", e.target.value); }}
+                  className={`w-full border rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-indigo-400 outline-none ${errors.password ? "border-red-500" : ""}`}
+                />
+                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700">
+                  {showPassword ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
+                </button>
+              </div>
+              <button type="button" onClick={generatePassword} className="px-4 py-2 bg-gray-100 border rounded-lg text-sm hover:bg-gray-200 whitespace-nowrap">Generate</button>
             </div>
-            <button type="button" onClick={generatePassword} className="px-4 py-2 bg-gray-100 border rounded-lg text-sm hover:bg-gray-200 whitespace-nowrap">Generate</button>
+            {errors.password && <span className="text-red-500 text-sm mt-1">{errors.password}</span>}
           </div>
-          {errors.password && <span className="text-red-500 text-sm mt-1">{errors.password}</span>}
-        </div>
+        )}
 
         {/* Role */}
         <div className="flex flex-col col-span-1 md:col-span-2">
@@ -261,10 +288,14 @@ const AddUser = ({ closeModal, onUserAdded }) => {
 
         {/* Buttons */}
         <div className="flex items-center gap-4 col-span-1 md:col-span-2 mt-6">
-          <button type="submit" className="bg-indigo-500 text-white px-5 py-2 rounded-lg hover:bg-indigo-700">Add User</button>
+          <button type="submit" className="bg-indigo-500 text-white px-5 py-2 rounded-lg hover:bg-indigo-700">
+            {userToEdit ? "Update User" : "Add User"}
+          </button>
           <button type="button" onClick={resetForm} className="bg-gray-200 text-gray-700 px-5 py-2 rounded-lg hover:bg-gray-300">Reset</button>
         </div>
+
       </form>
+
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} />
     </div>
   );

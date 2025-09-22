@@ -1,17 +1,65 @@
 // src/components/admin/UsersTable.jsx
 import React, { useState, useEffect } from "react";
-import { PencilIcon, TrashIcon, UserPlusIcon, MagnifyingGlassIcon } from "@heroicons/react/24/solid";
+import {
+  PencilIcon,
+  TrashIcon,
+  UserPlusIcon,
+  MagnifyingGlassIcon,
+} from "@heroicons/react/24/solid";
 import { useUser } from "../../context/UserContext";
 import AddUser from "./AddUser";
+import { toast } from "react-toastify";
 
 const TABLE_HEAD = ["Member", "Email", "Phone", "Role", "Account", "Actions"];
 
 const UsersTable = () => {
   const { currentUser, users, setUsers } = useUser();
   const [search, setSearch] = useState("");
-  const [isAddUserOpen, setIsAddUserOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingUser, setEditingUser] = useState(null);
 
-  // Fetch users function (reusable)
+  // Open modal for editing
+  const handleEditClick = (user) => {
+    setEditingUser(user);
+    setIsModalOpen(true);
+  };
+
+  // Open modal for adding
+  const handleAddClick = () => {
+    setEditingUser(null);
+    setIsModalOpen(true);
+  };
+
+const handleDeleteClick = async (uid) => {
+  if (!window.confirm("Are you sure you want to delete this user?")) return;
+
+  try {
+    const res = await fetch(`http://localhost:5000/api/users/${uid}`, {
+      method: "DELETE",
+    });
+
+    if (!res.ok) {
+      // Try to parse JSON error, fallback to generic
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.error || "Failed to delete user");
+    }
+
+    const data = await res.json();
+    console.log(data.message);
+
+    // Remove user from state
+    setUsers(prev => prev.filter(user => user.uid !== uid));
+
+    toast.success("User deleted successfully!");
+  } catch (error) {
+    console.error("Error deleting user:", error);
+    toast.error("Error deleting user: " + error.message);
+  }
+};
+
+
+
+  // Fetch users function
   const fetchUsers = async () => {
     try {
       const res = await fetch("http://localhost:5000/api/users");
@@ -28,11 +76,11 @@ const UsersTable = () => {
     }
   };
 
-  // Fetch users only once currentUser is loaded
   useEffect(() => {
     if (currentUser) fetchUsers();
   }, [currentUser]);
 
+  // Filter users for search
   const filteredRows = users.filter((user) => {
     const searchLower = search.toLowerCase();
     return (
@@ -50,14 +98,18 @@ const UsersTable = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between mb-6 items-center gap-4">
         <div>
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-500">Members List</h2>
-          <p className="text-gray-500 text-sm sm:text-base">See information about all members</p>
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-500">
+            Members List
+          </h2>
+          <p className="text-gray-500 text-sm sm:text-base">
+            See information about all members
+          </p>
         </div>
 
         {/* Add User Button */}
         <button
           className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 text-sm"
-          onClick={() => setIsAddUserOpen(true)}
+          onClick={handleAddClick}
         >
           <UserPlusIcon className="h-5 w-5" /> Add User
         </button>
@@ -96,10 +148,16 @@ const UsersTable = () => {
           </thead>
           <tbody>
             {filteredRows.map((user, idx) => (
-              <tr key={user._id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+              <tr
+                key={user._id}
+                className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
+              >
                 <td className="p-2 sm:p-3 flex items-center gap-2 sm:gap-3">
                   <img
-                    src={user.profilePic || "https://www.w3schools.com/howto/img_avatar.png"}
+                    src={
+                      user.profilePic ||
+                      "https://www.w3schools.com/howto/img_avatar.png"
+                    }
                     alt={user.firstName}
                     className="w-6 h-6 sm:w-8 sm:h-8 rounded-full object-cover"
                   />
@@ -107,23 +165,34 @@ const UsersTable = () => {
                     {user.firstName} {user.lastName}
                   </span>
                 </td>
-                <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">{user.email}</td>
-                <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700 hidden lg:block">{user.phone}</td>
-                <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">{user.role?.roleName || "user"}</td>
+                <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">
+                  {user.email}
+                </td>
+                <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700 hidden lg:block">
+                  {user.phone}
+                </td>
+                <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">
+                  {user.role?.roleName || "user"}
+                </td>
                 <td className="p-2 sm:p-3 text-xs sm:text-sm">
                   <span
                     className={`px-2 py-1 text-[10px] sm:text-xs rounded-full font-semibold ${
-                      user.isLocked ? "bg-red-100 text-red-700" : "bg-green-100 text-green-700"
+                      user.isLocked
+                        ? "bg-red-100 text-red-700"
+                        : "bg-green-100 text-green-700"
                     }`}
                   >
                     {user.isLocked ? "Locked" : "Active"}
                   </span>
                 </td>
                 <td className="p-2 sm:p-3 flex gap-2">
-                  <button className="text-gray-500 hover:text-gray-700">
+                  <button
+                    className="text-gray-500 hover:text-gray-700"
+                    onClick={() => handleEditClick(user)}
+                  >
                     <PencilIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   </button>
-                  <button className="text-red-500 hover:text-red-700">
+                  <button className="text-red-500 hover:text-red-700" onClick={() => handleDeleteClick(user.uid)}>
                     <TrashIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   </button>
                 </td>
@@ -133,15 +202,25 @@ const UsersTable = () => {
         </table>
       </div>
 
-      {/* Add User Modal */}
-      {isAddUserOpen && (
+      {/* Add/Edit User Modal */}
+      {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
           <div className="bg-white w-full max-w-3xl rounded-lg p-6 relative">
             <AddUser
-  closeModal={() => setIsAddUserOpen(false)}
-  onUserAdded={(newUser) => setUsers(prevUsers => [newUser, ...prevUsers])} 
-/>
-
+              closeModal={() => setIsModalOpen(false)}
+              onUserAdded={(newUser) => {
+                if (editingUser) {
+                  // Replace updated user in list
+                  setUsers((prev) =>
+                    prev.map((u) => (u._id === newUser._id ? newUser : u))
+                  );
+                } else {
+                  // Add new user
+                  setUsers((prev) => [newUser, ...prev]);
+                }
+              }}
+              userToEdit={editingUser}
+            />
           </div>
         </div>
       )}
