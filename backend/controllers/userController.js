@@ -7,47 +7,54 @@ export const createUser = async (req, res) => {
   try {
     const { uid: providedUid, firstName, lastName, email, phone, roleName, profilePic } = req.body;
 
-    // 🔹 Find or create role
-    let role = await Role.findOne({ roleName });
+    if (!firstName || !lastName || !email) {
+      return res.status(400).json({ error: "First name, last name, and email are required" });
+    }
+
+    //  Check duplicates
+    const existingUser = await User.findOne({ $or: [{ email }, { uid: providedUid }] });
+    if (existingUser) {
+      return res.status(400).json({ error: "User already exists with this email or UID" });
+    }
+
+    //  Find or create role
+    let role = await Role.findOne({ roleName: roleName.toLowerCase().trim() });
     if (!role) {
       role = new Role({
-        roleName,
+        roleName: roleName.toLowerCase().trim(),
         permissions: { manageUsers: false, manageRoles: false },
       });
       await role.save();
-      console.log("Created new role:", role);
     }
 
-    // 🔹 Determine Firebase UID
+    //  Determine Firebase UID
     let uidToUse = providedUid;
-
     if (!uidToUse) {
-      // If no UID provided by client, create user in Firebase Admin (server-side flow)
-      const phoneNumberToUse = phone && /^\+\d{10,15}$/.test(phone) ? phone : undefined;
-      const firebaseUser = await admin.auth().createUser({
+      const createParams = {
         email,
         emailVerified: false,
         password: Math.random().toString(36).slice(-10) + "Aa1!",
         displayName: `${firstName} ${lastName}`,
-        photoURL: profilePic || null,
-        phoneNumber: phoneNumberToUse,
         disabled: false,
-      });
+      };
+
+      if (phone && /^\+\d{10,15}$/.test(phone)) createParams.phoneNumber = phone;
+      if (profilePic && /^https?:\/\//i.test(profilePic)) createParams.photoURL = profilePic;
+
+      const firebaseUser = await admin.auth().createUser(createParams);
       uidToUse = firebaseUser.uid;
-      console.log("Firebase user created:", uidToUse);
     } else {
-      // If UID provided (client already created Firebase user), verify it maps to the email
       try {
         const existing = await admin.auth().getUser(uidToUse);
         if (existing.email && existing.email.toLowerCase() !== email.toLowerCase()) {
           return res.status(400).json({ error: "Provided UID does not match email" });
         }
-      } catch (e) {
+      } catch {
         return res.status(400).json({ error: "Invalid provided UID" });
       }
     }
 
-    // 🔹 Save user in MongoDB
+    //  Save user in MongoDB
     const newUser = new User({
       uid: uidToUse,
       firstName,
@@ -57,16 +64,17 @@ export const createUser = async (req, res) => {
       profilePic,
       role: role._id,
     });
+
     await newUser.save();
     const populatedUser = await User.findById(newUser._id).populate("role", "roleName permissions");
-    console.log("User created in MongoDB:", populatedUser);
 
     res.status(201).json({ message: "User created successfully", user: populatedUser });
   } catch (err) {
     console.error("Error creating user:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message, code: err.code || "SERVER_ERROR" });
   }
 };
+
 
 // Get user by UID
 export const getUserByUid = async (req, res) => {
@@ -141,24 +149,30 @@ export const updateUser = async (req, res) => {
     const user = await User.findOne({ uid });
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    // Update role if provided
+    //  Update role if provided
     if (updates.roleName) {
-      let role = await Role.findOne({ roleName: updates.roleName });
+      const roleNameNormalized = updates.roleName.toLowerCase().trim();
+      let role = await Role.findOne({ roleName: roleNameNormalized });
+
       if (!role) {
         role = new Role({
-          roleName: updates.roleName,
+          roleName: roleNameNormalized,
           permissions: { manageUsers: false, manageRoles: false },
         });
         await role.save();
         console.log("Created new role during update:", role);
       }
+
       updates.role = role._id;
       delete updates.roleName;
     }
 
-    // Apply updates
+    //  Whitelist allowed fields to prevent unsafe updates
+    const allowedUpdates = ["firstName", "lastName", "phone", "profilePic", "role"];
     Object.keys(updates).forEach(key => {
-      user[key] = updates[key];
+      if (allowedUpdates.includes(key)) {
+        user[key] = updates[key];
+      }
     });
 
     await user.save();
@@ -167,6 +181,6 @@ export const updateUser = async (req, res) => {
     res.json({ message: "User updated successfully", user: updatedUser });
   } catch (err) {
     console.error("Error updating user:", err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: err.message, code: err.code || "SERVER_ERROR" });
   }
 };

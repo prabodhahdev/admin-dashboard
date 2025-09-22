@@ -1,7 +1,7 @@
 // src/components/admin/AddUser.jsx
 import React, { useState, useEffect } from "react";
 import { ToastContainer, toast } from "react-toastify";
-import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
+import { EyeIcon, EyeSlashIcon, XMarkIcon } from "@heroicons/react/24/outline";
 import "react-toastify/dist/ReactToastify.css";
 import { sendPasswordResetEmail, getAuth } from "firebase/auth";
 import { useUser } from "../../context/UserContext";
@@ -50,11 +50,15 @@ const AddUser = ({ closeModal, onUserAdded }) => {
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onload = e => setProfilePic(e.target.result);
-      reader.readAsDataURL(file);
+    if (!file) return;
+    const MAX_SIZE_MB = 2; // guard to avoid 413s
+    if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+      toast.error(`Image too large. Max ${MAX_SIZE_MB}MB`);
+      return;
     }
+    const reader = new FileReader();
+    reader.onload = e => setProfilePic(e.target.result);
+    reader.readAsDataURL(file);
   };
 
   const resetForm = () => {
@@ -148,6 +152,14 @@ const AddUser = ({ closeModal, onUserAdded }) => {
 
   return (
     <div className="w-full max-w-3xl p-8 bg-white rounded-lg relative">
+
+      <button
+    onClick={closeModal}
+    className="absolute top-3 right-3 text-gray-400 hover:text-gray-600"
+  >
+    <XMarkIcon className="w-6 h-6" />
+  </button>
+
       <h2 className="text-lg sm:text-xl font-semibold text-gray-500 mb-5">Add New User</h2>
 
       <div className="flex items-center gap-4 mb-6">
