@@ -27,6 +27,15 @@ const AdminSideNavbar = () => {
         </Link>
       )}
 
+      {currentUser && (
+        <Link
+          to="/superadmin-dashboard/profile"
+          className="block px-2 py-2 mb-2 hover:bg-gray-700 rounded"
+        >
+          Profile
+        </Link>
+      )}
+
       <button
         onClick={logout}
         className="text-left px-2 py-2 hover:bg-gray-700 rounded"

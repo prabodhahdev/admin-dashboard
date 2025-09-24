@@ -1,16 +1,16 @@
+// src/components/admin/ForgotPassword.jsx
 import React, { useState } from "react";
-import { auth, db } from "../../firebase/firebase";
+import { auth } from "../../firebase/firebase";
 import { sendPasswordResetEmail } from "firebase/auth";
 import { toast } from "react-toastify";
 import axios from "axios";
 
 const ForgotPassword = () => {
-    const API_URL = process.env.REACT_APP_API_URL;
+  const API_URL = process.env.REACT_APP_API_URL;
 
   const [email, setEmail] = useState("");
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // email regex for format validation
   const validateEmailFormat = (value) => {
     const regex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return regex.test(value);
@@ -18,40 +18,46 @@ const ForgotPassword = () => {
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();
-    setError("");
 
-    // 1. Validate format
     if (!email) {
-      setError("Please enter your registered email.");
       toast.error("Please enter your registered email.");
       return;
     }
     if (!validateEmailFormat(email)) {
-      setError("Invalid email format.");
       toast.error("Invalid email format.");
       return;
     }
 
-    try {
-      
+    setLoading(true);
 
-      // 3. Send password reset email
+    try {
+      // 1️⃣ Check if email exists in database
+      const res = await axios.get(`${API_URL}/users/email/${encodeURIComponent(email)}`);
+      const user = res.data;
+
+      if (!user) {
+        toast.error("Email not found. Please check or register first.");
+        setLoading(false);
+        return;
+      }
+
+      // 2️⃣ Send password reset email via Firebase
       await sendPasswordResetEmail(auth, email, {
-        url: "http://localhost:3000/reset-password", // redirect URL
+        url: "http://localhost:3000/reset-password", // redirect URL after reset
         handleCodeInApp: true,
       });
 
       toast.success("Password reset link sent to your email!");
-      setError("");
-      setEmail(""); // clear field
+      setEmail("");
     } catch (err) {
-      setError(err.message);
-      if (err.code === "auth/user-not-found") {
+      console.error("Error in forgot password:", err);
+      if (err.response && err.response.status === 404) {
         toast.error("Email not found. Please check or register first.");
       } else {
-        toast.error(err.message);
+        toast.error(err.message || "Something went wrong.");
       }
-      console.error("Error sending password reset email:", err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -72,9 +78,10 @@ const ForgotPassword = () => {
           />
           <button
             type="submit"
+            disabled={loading}
             className="w-full h-12 rounded-lg bg-indigo-500 text-white font-medium hover:opacity-90 transition-opacity mt-3"
           >
-            Send Reset Link
+            {loading ? "Sending..." : "Send Reset Link"}
           </button>
         </form>
         <p className="text-gray-500 text-sm mt-4 text-center">

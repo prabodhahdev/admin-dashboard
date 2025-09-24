@@ -111,6 +111,7 @@ const AuthForm = ({ mode }) => {
   // failedAttempts: 0
   // lockUntil: null
   // This ensures the account can log in normally and automatic lock logic works as expected.
+
   const checkLockStatus = async (userId) => {
     const userRef = doc(db, "users", userId);
     const userSnap = await getDoc(userRef);
@@ -211,7 +212,7 @@ const handleSubmit = async (e) => {
     }
 
     try {
-      // 1️⃣ Firebase Auth signup
+      // 1️ Firebase Auth signup
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 

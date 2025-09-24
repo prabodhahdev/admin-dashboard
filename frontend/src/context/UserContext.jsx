@@ -3,6 +3,7 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 import { getAuth, onAuthStateChanged, signOut } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import { toast } from "react-toastify";
 
 const UserContext = createContext();
 export const useUser = () => useContext(UserContext);
@@ -44,58 +45,80 @@ export const UserProvider = ({ children }) => {
     }
   };
 
-  // Fetch manageable users (based on role level)
-  const fetchManageableUsers = async (idToken) => {
+  // Fetch all users
+  const fetchUsers = async () => {
     try {
-      const res = await axios.get(`${API_URL}/users/manage`, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
+      const res = await axios.get(`${API_URL}/users`);
       setUsers(res.data);
     } catch (err) {
-      console.error("Failed to fetch manageable users:", err);
-      setUsers([]);
+      console.error("Failed to fetch users:", err);
     }
   };
 
-  // Fetch current user
-  const fetchCurrentUser = async (uid) => {
-    try {
-      console.log("Fetching current user with UID:", uid);
+  // Fetch current user and handle account lock
+ const fetchCurrentUser = async (uid) => {
+  try {
+    const idToken = await auth.currentUser.getIdToken(true);
+    const res = await axios.get(`${API_URL}/users/${uid}`, {
+      headers: { Authorization: `Bearer ${idToken}` },
+    });
 
-      // Get Firebase ID token
-      const idToken = await auth.currentUser.getIdToken(true);
+    const user = res.data;
 
-      const res = await axios.get(`${API_URL}/users/${uid}`, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
+    // Immediate logout if backend reports account locked
+    if (user.isLocked) {
+      toast.error("Your account has been locked. Logging out...");
+      await logout();
+      return;
+    }
 
-      const user = res.data;
-      console.log("Fetched current user:", user);
+    const role = user.role || { roleName: "user", permissions: {} };
+    setCurrentUser({ ...user, role, permissions: role.permissions || {} });
 
-      const role = user.role || { roleName: "user", permissions: {} };
-      const permissions = role.permissions || {};
+    if (role.permissions.manageUsers) await fetchUsers();
+    await fetchRoles();
+  } catch (err) {
+    console.error("Error fetching current user:", err);
 
-      setCurrentUser({
-        ...user,
-        role,
-        permissions,
-      });
-
-      // Fetch manageable users only if the current user can manage users
-      if (permissions.manageUsers) {
-        await fetchManageableUsers(idToken);
-      }
-
-      await fetchRoles();
-    } catch (err) {
-      console.error("Error fetching current user:", err);
+    // If backend returns 403, logout and redirect
+    if (err.response?.status === 403) {
+      toast.error(err.response.data.error || "Account locked");
+      await logout();
+    } else if (err.response?.status === 401) {
+      await logout();
+    } else {
       setCurrentUser(null);
-      setUsers([]);
-    } finally {
-      setLoading(false);
     }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
 
+
+  // Real-time lock check every 5 seconds (optional)
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      if (currentUser && auth.currentUser) {
+        try {
+          const idToken = await auth.currentUser.getIdToken(true);
+          const res = await axios.get(`${API_URL}/users/${currentUser.uid}`, {
+            headers: { Authorization: `Bearer ${idToken}` },
+          });
+
+          if (res.data.isLocked) {
+            toast.error("Your account has been locked. Logging out...");
+            await logout();
+          }
+        } catch (err) {
+          console.error("Error checking lock status:", err);
+        }
+      }
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [currentUser, auth.currentUser]);
+
+  // Monitor Firebase auth state
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {

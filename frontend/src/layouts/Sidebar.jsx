@@ -20,14 +20,6 @@ const Sidebar = () => {
       path: "/dashboard/manage-roles",
       permission: "manageRoles",
     },
-
-    {
-      label: "My Profile",
-      path: "/dashboard/profile",
-      permission: "viewProfile",
-    },
-   
-
   ];
 
   return (
@@ -44,8 +36,16 @@ const Sidebar = () => {
             </Link>
           )
       )}
+      {currentUser && (
+        <Link
+          to="/dashboard/profile"
+          className="block px-2 py-2 mb-2 hover:bg-gray-700 rounded"
+        >
+          Profile
+        </Link>
+      )}
 
-     <button
+      <button
         onClick={logout}
         className="text-left px-2 py-2 hover:bg-gray-700 rounded"
       >

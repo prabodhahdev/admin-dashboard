@@ -1,63 +1,19 @@
-import { useEffect, useState } from "react";
-import { getAuth, onAuthStateChanged } from "firebase/auth";
+import React from "react";
 import { Navigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 
+const ProtectedRoute = ({ children, requiredPermission }) => {
+  const { currentUser, loading, hasPermission } = useUser();
 
-// const ProtectedRoute = ({ children, allowedRoles }) => {
-//   const [loading, setLoading] = useState(true);
-//   const [user, setUser] = useState(null);
+  // Wait until user state is ready
+  if (loading) return <div>Loading...</div>;
 
-//   useEffect(() => {
-//     const auth = getAuth();
-//     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-//       setUser(currentUser);
-//       setLoading(false);
-//     });
-//     return () => unsubscribe();
-//   }, []);
+  // Redirect if not logged in
+  if (!currentUser) return <Navigate to="/" replace />;
 
-//   if (loading) return null; 
-
-//   const isLoggedIn =
-//     localStorage.getItem("isLoggedIn") === "true" ||
-//     sessionStorage.getItem("isLoggedIn") === "true";
-
-//   if (!user || !isLoggedIn) return <Navigate to="/" />;
-
-//   const role = localStorage.getItem("role") || sessionStorage.getItem("role");
-//   if (allowedRoles && !allowedRoles.includes(role)) return <Navigate to="/" />;
-
-//   return children;
-// };
-
-// export default ProtectedRoute;
-
-
- const ProtectedRoute = ({ children, requiredPermission }) => {
-  const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState(null);
-  const { currentUser, hasPermission } = useUser();
-
-  useEffect(() => {
-    const auth = getAuth();
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, []);
-
-  if (loading) return null;
-
-  const isLoggedIn =
-    localStorage.getItem("isLoggedIn") === "true" ||
-    sessionStorage.getItem("isLoggedIn") === "true";
-
-  if (!user || !isLoggedIn) return <Navigate to="/" />;
-
+  // Redirect if missing permission
   if (requiredPermission && !hasPermission(requiredPermission)) {
-    return <Navigate to="/dashboard" />; // redirect if no permission
+    return <Navigate to="/dashboard" replace />;
   }
 
   return children;

@@ -259,7 +259,7 @@ export const resetFailedAttempts = async (req, res) => {
   }
 };
 
-// Update user
+// Update user based on roles [manage users]
 export const updateUser = async (req, res) => {
   try {
     const { uid } = req.params;
@@ -439,5 +439,59 @@ export const toggleAccountLock = async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Server error" });
+  }
+};
+
+// Update profile for currently logged-in user
+export const updateProfile = async (req, res) => {
+  try {
+    const userId = req.params.uid; // get UID from URL
+    const { firstName, lastName, phone, profilePic } = req.body;
+
+    const user = await User.findOne({ uid: userId }).populate("role");
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    if (firstName) user.firstName = firstName;
+    if (lastName) user.lastName = lastName;
+    if (phone) user.phone = phone;
+    if (profilePic) user.profilePic = profilePic;
+
+    await user.save();
+
+    res.json({ message: "Profile updated successfully", user });
+  } catch (err) {
+    console.error("Error updating profile:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+export const failedAttempt = async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const user = await User.findOne({ uid });
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    let failedAttempts = (user.failedAttempts || 0) + 1;
+    let update = { failedAttempts };
+
+    const now = Date.now();
+
+    if (failedAttempts >= 2) { // MAX_FAILED_ATTEMPTS
+      update.isLocked = true;
+      update.lockUntil = now + 1 * 60 * 1000; // 1 min
+      update.failedAttempts = 0;
+      update.lockoutCount = (user.lockoutCount || 0) + 1;
+
+      if (update.lockoutCount >= 3) { // MAX_LOCKOUTS_PER_DAY
+        update.adminUnlockRequired = true;
+      }
+    }
+
+    await User.updateOne({ uid }, { $set: update });
+    res.json({ success: true, update });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
 };

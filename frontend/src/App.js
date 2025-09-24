@@ -13,6 +13,7 @@ import SuperAdminPage from "./pages/admin/SuperAdminPage";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import ManageUserPage from "./pages/admin/ManageUserPage";
 import ManageRolesPage from "./pages/admin/ManageRolesPage";
+import ProfilePage from "./pages/user/ProfilePage";
 
 function App() {
   return (
@@ -35,6 +36,8 @@ function App() {
         >
           <Route path="manage-users" element={<ManageUserPage />} />
           <Route path="manage-roles" element={<ManageRolesPage />} />
+          <Route path="profile" element={<ProfilePage />} />
+          
         </Route>
 
         <Route path="/dashboard" element={<UserDashboardPage />}>
@@ -54,7 +57,17 @@ function App() {
               </ProtectedRoute>
             }
           />
+
+          <Route
+          path="profile"
+          element={
+            <ProtectedRoute>
+              <ProfilePage />
+            </ProtectedRoute>
+          }
+        />
         </Route>
+        
       </Routes>
 
       <ToastContainer position="top-right" autoClose={3000} />
