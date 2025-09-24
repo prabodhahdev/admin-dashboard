@@ -197,13 +197,19 @@ export const updateUser = async (req, res) => {
     }
 
     //  Whitelist allowed fields to prevent unsafe updates
-    const allowedUpdates = [
-      "firstName",
-      "lastName",
-      "phone",
-      "profilePic",
-      "role",
-    ];
+   const allowedUpdates = [
+  "firstName",
+  "lastName",
+  "phone",
+  "profilePic",
+  "role",
+  "isLocked",
+  "lockedCount",
+  "failedAttempts",
+  "lockUntil",
+  "adminUnlockRequired"
+];
+
     Object.keys(updates).forEach((key) => {
       if (allowedUpdates.includes(key)) {
         user[key] = updates[key];
