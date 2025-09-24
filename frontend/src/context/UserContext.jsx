@@ -44,48 +44,53 @@ export const UserProvider = ({ children }) => {
     }
   };
 
-  // Fetch all users
-  const fetchUsers = async () => {
+  // Fetch manageable users (based on role level)
+  const fetchManageableUsers = async (idToken) => {
     try {
-      const res = await axios.get(`${API_URL}/users`);
+      const res = await axios.get(`${API_URL}/users/manage`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
       setUsers(res.data);
     } catch (err) {
-      console.error("Failed to fetch users:", err);
+      console.error("Failed to fetch manageable users:", err);
+      setUsers([]);
     }
   };
 
   // Fetch current user
   const fetchCurrentUser = async (uid) => {
     try {
-      console.log("Fetching current user with UID:", uid); // 🔹 log UID
+      console.log("Fetching current user with UID:", uid);
 
-      const res = await axios.get(`${API_URL}/users/${uid}`);
+      // Get Firebase ID token
+      const idToken = await auth.currentUser.getIdToken(true);
+
+      const res = await axios.get(`${API_URL}/users/${uid}`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
+
       const user = res.data;
-      console.log("Fetched current user:", user); // 🔹 log result
+      console.log("Fetched current user:", user);
 
-      // // Ensure role and permissions exist
-      // const role = user.role || { roleName: "user", permissions: {} };
-      // setCurrentUser({ ...user, role, permissions: role.permissions || {} });
-//-----------------------------------
-      // Ensure role and permissions exist
       const role = user.role || { roleName: "user", permissions: {} };
       const permissions = role.permissions || {};
 
       setCurrentUser({
         ...user,
         role,
-        permissions, // 🔹 flatten so you can access directly
+        permissions,
       });
-//--------------------------------------
-      // Fetch all users if current user can manage users
-      if (role.permissions.manageUsers) {
-        await fetchUsers();
+
+      // Fetch manageable users only if the current user can manage users
+      if (permissions.manageUsers) {
+        await fetchManageableUsers(idToken);
       }
 
       await fetchRoles();
     } catch (err) {
       console.error("Error fetching current user:", err);
       setCurrentUser(null);
+      setUsers([]);
     } finally {
       setLoading(false);
     }

@@ -4,7 +4,7 @@ import { PencilIcon, TrashIcon, UserPlusIcon, MagnifyingGlassIcon } from "@heroi
 import AddRole from "./AddRole"; 
 import { toast } from "react-toastify";
 
-const TABLE_HEAD = ["Role Name", "Description", "Permissions", "Actions"];
+const TABLE_HEAD = ["Role Name", "Description", "Permissions", "Role Level", "Actions"];
 
 const RolesTable = () => {
   const [roles, setRoles] = useState([]);
@@ -51,9 +51,15 @@ const RolesTable = () => {
     const searchLower = search.toLowerCase();
     return (
       role.roleName.toLowerCase().includes(searchLower) ||
-      role.description?.toLowerCase().includes(searchLower)
+      role.description?.toLowerCase().includes(searchLower) ||
+      String(role.level || "").toLowerCase().includes(searchLower) 
     );
   });
+
+  // Handle edit click
+  const handleEditClick = (role) => {
+    setModalRole(role);
+  };
 
   return (
     <div className="p-4 sm:p-6 bg-white shadow rounded-lg w-full">
@@ -103,36 +109,39 @@ const RolesTable = () => {
             </tr>
           </thead>
           <tbody>
-            {filteredRows.map((role, idx) => (
-              <tr key={role._id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">{role.roleName}</td>
-                <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">{role.description}</td>
-                <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">
-                  {role.permissions
-                    ? Object.keys(role.permissions)
-                        .filter((key) => role.permissions[key])
-                        .join(", ")
-                    : "-"}
-                </td>
-                <td className="p-2 sm:p-3 flex gap-2">
-                  {/* Edit Role */}
-                  <button
-                    className="text-gray-500 hover:text-gray-700"
-                    onClick={() => setModalRole(role)} // edit mode
-                  >
-                    <PencilIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-                  </button>
-
-                  {/* Delete Role */}
-                  <button
-                    className="text-red-500 hover:text-red-700"
-                    onClick={() => handleDeleteClick(role._id)}
-                  >
-                    <TrashIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {filteredRows.map((role, idx) => {
+              const isSuperAdmin = role.roleName === "superadmin";
+              return (
+                <tr key={role._id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
+                  <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">{role.roleName}</td>
+                  <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">{role.description}</td>
+                  <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">
+                    {role.permissions
+                      ? Object.keys(role.permissions)
+                          .filter((key) => role.permissions[key])
+                          .join(", ")
+                      : "-"}
+                  </td>
+                  <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">{role.level || "-"}</td>
+                  <td className="p-2 sm:p-3 flex gap-2">
+                    <button
+                      className={`text-gray-500 hover:text-gray-700 ${isSuperAdmin ? "opacity-50 cursor-not-allowed" : ""}`}
+                      onClick={() => !isSuperAdmin && handleEditClick(role)}
+                      disabled={isSuperAdmin}
+                    >
+                      <PencilIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+                    </button>
+                    <button
+                      className={`text-red-500 hover:text-red-700 ${isSuperAdmin ? "opacity-50 cursor-not-allowed" : ""}`}
+                      onClick={() => !isSuperAdmin && handleDeleteClick(role._id)}
+                      disabled={isSuperAdmin}
+                    >
+                      <TrashIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

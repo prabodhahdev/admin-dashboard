@@ -9,6 +9,7 @@ import {
 import { useUser } from "../../context/UserContext";
 import AddUser from "./AddUser";
 import { toast } from "react-toastify";
+import { getAuth } from "firebase/auth";
 
 const TABLE_HEAD = ["Member", "Email", "Phone", "Role", "Account", "Actions"];
 
@@ -18,46 +19,43 @@ const UsersTable = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
 
-  // Open modal for editing
   const handleEditClick = (user) => {
     setEditingUser(user);
     setIsModalOpen(true);
   };
 
-  // Open modal for adding
   const handleAddClick = () => {
     setEditingUser(null);
     setIsModalOpen(true);
   };
 
-const handleDeleteClick = async (uid) => {
-  if (!window.confirm("Are you sure you want to delete this user?")) return;
+  const handleDeleteClick = async (uid) => {
+    if (!window.confirm("Are you sure you want to delete this user?")) return;
 
-  try {
-    const res = await fetch(`http://localhost:5000/api/users/${uid}`, {
-      method: "DELETE",
-    });
+    try {
+      const auth = getAuth();
+      const token = await auth.currentUser.getIdToken(true);
 
-    if (!res.ok) {
-      // Try to parse JSON error, fallback to generic
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || "Failed to delete user");
+      const res = await fetch(`http://localhost:5000/api/users/${uid}`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Failed to delete user");
+      }
+
+      setUsers((prev) => prev.filter((user) => user.uid !== uid));
+      toast.success("User deleted successfully!");
+    } catch (error) {
+      console.error("Error deleting user:", error);
+      toast.error("Error deleting user: " + error.message);
     }
-
-    const data = await res.json();
-    console.log(data.message);
-
-    // Remove user from state
-    setUsers(prev => prev.filter(user => user.uid !== uid));
-
-    toast.success("User deleted successfully!");
-  } catch (error) {
-    console.error("Error deleting user:", error);
-    toast.error("Error deleting user: " + error.message);
-  }
-};
-
-
+  };
 
   // Fetch users function
   const fetchUsers = async () => {
@@ -65,9 +63,12 @@ const handleDeleteClick = async (uid) => {
       const res = await fetch("http://localhost:5000/api/users");
       let data = await res.json();
 
-      // Non-superadmins cannot see other superadmins
-      if (currentUser?.role?.roleName !== "superadmin") {
-        data = data.filter((u) => u.role?.roleName !== "superadmin");
+      const currentLevel = currentUser?.role?.level ?? 0;
+      const isSuperAdmin = currentUser?.role?.roleName === "superadmin";
+
+      // Filter users if NOT superadmin
+      if (!isSuperAdmin) {
+        data = data.filter((u) => u.role?.level > currentLevel);
       }
 
       setUsers(data);
@@ -106,7 +107,6 @@ const handleDeleteClick = async (uid) => {
           </p>
         </div>
 
-        {/* Add User Button */}
         <button
           className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 text-sm"
           onClick={handleAddClick}
@@ -187,12 +187,32 @@ const handleDeleteClick = async (uid) => {
                 </td>
                 <td className="p-2 sm:p-3 flex gap-2">
                   <button
-                    className="text-gray-500 hover:text-gray-700"
-                    onClick={() => handleEditClick(user)}
+                    className={`text-gray-500 hover:text-gray-700 ${
+                      user.role?.roleName === "superadmin"
+                        ? "opacity-50 cursor-not-allowed"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      user.role?.roleName !== "superadmin" &&
+                      handleEditClick(user)
+                    }
+                    disabled={user.role?.roleName === "superadmin"}
                   >
                     <PencilIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   </button>
-                  <button className="text-red-500 hover:text-red-700" onClick={() => handleDeleteClick(user.uid)}>
+
+                  <button
+                    className={`text-red-500 hover:text-red-700 ${
+                      user.role?.roleName === "superadmin"
+                        ? "opacity-50 cursor-not-allowed"
+                        : ""
+                    }`}
+                    onClick={() =>
+                      user.role?.roleName !== "superadmin" &&
+                      handleDeleteClick(user.uid)
+                    }
+                    disabled={user.role?.roleName === "superadmin"}
+                  >
                     <TrashIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                   </button>
                 </td>
@@ -209,15 +229,18 @@ const handleDeleteClick = async (uid) => {
             <AddUser
               closeModal={() => setIsModalOpen(false)}
               onUserAdded={(newUser) => {
-                if (editingUser) {
-                  // Replace updated user in list
-                  setUsers((prev) =>
-                    prev.map((u) => (u._id === newUser._id ? newUser : u))
-                  );
-                } else {
-                  // Add new user
-                  setUsers((prev) => [newUser, ...prev]);
-                }
+                // Update the users state immediately
+                setUsers((prev) => {
+                  if (editingUser) {
+                    // Update edited user
+                    return prev.map((u) =>
+                      u._id === newUser._id ? newUser : u
+                    );
+                  } else {
+                    // Add new user at the top
+                    return [newUser, ...prev];
+                  }
+                });
               }}
               userToEdit={editingUser}
             />

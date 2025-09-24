@@ -7,7 +7,7 @@ import { sendPasswordResetEmail, getAuth } from "firebase/auth";
 import { useUser } from "../../context/UserContext";
 
 const AddUser = ({ closeModal, userToEdit }) => {
-  const { setUsers } = useUser();
+  const { setUsers, currentUser } = useUser();
 
   const [profilePic, setProfilePic] = useState(null);
   const [firstName, setFirstName] = useState("");
@@ -18,34 +18,50 @@ const AddUser = ({ closeModal, userToEdit }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState("");
   const [roles, setRoles] = useState([]);
-  const [errors, setErrors] = useState({ firstName: "", lastName: "", email: "", phone: "", password: "" });
+  const [errors, setErrors] = useState({
+    firstName: "",
+    lastName: "",
+    email: "",
+    phone: "",
+    password: "",
+  });
+  const [isLocked, setIsLocked] = useState(false); // <-- account lock state
 
-  const roleLabels = { user: "User", admin: "Admin", superadmin: "Super Admin" };
+  const roleLabels = {
+    user: "User",
+    admin: "Admin",
+    superadmin: "Super Admin",
+  };
 
   // Validation
   const validateField = (name, value) => {
     let error = "";
     switch (name) {
       case "firstName":
-        if (!/^[A-Za-z]{2,50}$/.test(value)) error = "First name must be 2-50 alphabets";
+        if (!/^[A-Za-z]{2,50}$/.test(value))
+          error = "First name must be 2-50 alphabets";
         break;
       case "lastName":
-        if (!/^[A-Za-z]{2,50}$/.test(value)) error = "Last name must be 2-50 alphabets";
+        if (!/^[A-Za-z]{2,50}$/.test(value))
+          error = "Last name must be 2-50 alphabets";
         break;
       case "email":
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) error = "Invalid email format";
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
+          error = "Invalid email format";
         break;
       case "phone":
-        if (!/^(\+\d{1,3})?\d{10,15}$/.test(value)) error = "Phone number must be 10–15 digits";
+        if (!/^(\+\d{1,3})?\d{10,15}$/.test(value))
+          error = "Phone number must be 10–15 digits";
         break;
       case "password":
         if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(value))
-          error = "Password must include uppercase, lowercase, number, special char, min 8 chars";
+          error =
+            "Password must include uppercase, lowercase, number, special char, min 8 chars";
         break;
       default:
         break;
     }
-    setErrors(prev => ({ ...prev, [name]: error }));
+    setErrors((prev) => ({ ...prev, [name]: error }));
     return error === "";
   };
 
@@ -59,7 +75,7 @@ const AddUser = ({ closeModal, userToEdit }) => {
       return;
     }
     const reader = new FileReader();
-    reader.onload = e => setProfilePic(e.target.result);
+    reader.onload = (e) => setProfilePic(e.target.result);
     reader.readAsDataURL(file);
   };
 
@@ -71,8 +87,15 @@ const AddUser = ({ closeModal, userToEdit }) => {
     setPhone("");
     setPassword("");
     setProfilePic(null);
-    setErrors({ firstName: "", lastName: "", email: "", phone: "", password: "" });
+    setErrors({
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+      password: "",
+    });
     setRole(roles[0]?.roleName || "user");
+    setIsLocked(false); // reset lock status
   };
 
   // Fetch roles
@@ -80,16 +103,29 @@ const AddUser = ({ closeModal, userToEdit }) => {
     const fetchRoles = async () => {
       try {
         const res = await fetch("http://localhost:5000/api/roles");
-        const data = await res.json();
+        let data = await res.json();
+
+        const currentLevel = currentUser?.role?.level ?? 0;
+        const isSuperAdmin = currentUser?.role?.roleName === "superadmin";
+
+        // 🔹 Role filtering based on current user
+        data = data.filter((r) => {
+          if (isSuperAdmin) return true;
+          if (userToEdit && r.roleName === userToEdit.role?.roleName)
+            return true;
+          return r.level > currentLevel;
+        });
+
         setRoles(data);
-        if (data.length > 0) setRole(data[0].roleName);
+        if (data.length > 0)
+          setRole(userToEdit ? userToEdit.role?.roleName : data[0].roleName);
       } catch (error) {
         console.error(error);
         toast.error("Failed to load roles");
       }
     };
     fetchRoles();
-  }, []);
+  }, [currentUser, userToEdit]);
 
   // Populate form if editing
   useEffect(() => {
@@ -101,6 +137,7 @@ const AddUser = ({ closeModal, userToEdit }) => {
       setProfilePic(userToEdit.profilePic || null);
       setRole(userToEdit.role?.roleName || "user");
       setPassword(""); // password optional
+      setIsLocked(userToEdit.isLocked || false); // <-- populate lock state
     }
   }, [userToEdit]);
 
@@ -120,7 +157,7 @@ const AddUser = ({ closeModal, userToEdit }) => {
       validateField("lastName", lastName) &&
       validateField("email", email) &&
       validateField("phone", phone) &&
-      (userToEdit ? true : validateField("password", password)); // password required only for new user
+      (userToEdit ? true : validateField("password", password));
 
     if (!isValid) {
       toast.error("Please fix errors before submitting.");
@@ -128,6 +165,9 @@ const AddUser = ({ closeModal, userToEdit }) => {
     }
 
     try {
+      const auth = getAuth();
+      const idToken = await auth.currentUser.getIdToken(true);
+
       const url = userToEdit
         ? `http://localhost:5000/api/users/${userToEdit.uid}`
         : "http://localhost:5000/api/users";
@@ -135,30 +175,38 @@ const AddUser = ({ closeModal, userToEdit }) => {
       const method = userToEdit ? "PUT" : "POST";
 
       const bodyData = userToEdit
-        ? { firstName, lastName, phone, profilePic, roleName: role }
-        : { firstName, lastName, email, phone, password, roleName: role, profilePic };
+        ? { firstName, lastName, phone, profilePic, roleName: role, isLocked } // include lock status
+        : {
+            firstName,
+            lastName,
+            email,
+            phone,
+            password,
+            roleName: role,
+            profilePic,
+          };
 
       const res = await fetch(url, {
         method,
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
         body: JSON.stringify(bodyData),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Operation failed");
 
-      setUsers(prev => {
+      setUsers((prev) => {
         if (userToEdit) {
-          return prev.map(u => (u.uid === userToEdit.uid ? data.user : u));
+          return prev.map((u) => (u.uid === userToEdit.uid ? data.user : u));
         } else {
           return [data.user, ...prev];
         }
       });
 
-      if (!userToEdit) {
-        const auth = getAuth();
-        await sendPasswordResetEmail(auth, email);
-      }
+      if (!userToEdit) await sendPasswordResetEmail(auth, email);
 
       toast.success(userToEdit ? "User updated!" : "User added & email sent!");
       resetForm();
@@ -171,7 +219,6 @@ const AddUser = ({ closeModal, userToEdit }) => {
 
   return (
     <div className="w-full max-w-3xl p-8 bg-white rounded-lg relative">
-
       {/* Close Button */}
       <button
         onClick={closeModal}
@@ -193,84 +240,140 @@ const AddUser = ({ closeModal, userToEdit }) => {
         />
         <label className="text-sm text-indigo-600 cursor-pointer">
           <span className="underline">Change Profile Picture</span>
-          <input type="file" className="hidden" onChange={handleFileChange} accept="image/*" />
+          <input
+            type="file"
+            className="hidden"
+            onChange={handleFileChange}
+            accept="image/*"
+          />
         </label>
       </div>
 
       {/* Form */}
-      <form className="grid grid-cols-1 md:grid-cols-2 gap-4" onSubmit={handleSubmit}>
-
+      <form
+        className="grid grid-cols-1 md:grid-cols-2 gap-4"
+        onSubmit={handleSubmit}
+      >
         {/* First Name */}
         <div className="flex flex-col">
-          <label className="text-sm font-medium text-gray-600 mb-1">First Name</label>
+          <label className="text-sm font-medium text-gray-600 mb-1">
+            First Name
+          </label>
           <input
             type="text"
             value={firstName}
             onChange={(e) => setFirstName(e.target.value)}
             onBlur={(e) => validateField("firstName", e.target.value)}
-            className={`border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none ${errors.firstName ? "border-red-500" : ""}`}
+            className={`border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none ${
+              errors.firstName ? "border-red-500" : ""
+            }`}
           />
-          {errors.firstName && <span className="text-red-500 text-sm">{errors.firstName}</span>}
+          {errors.firstName && (
+            <span className="text-red-500 text-sm">{errors.firstName}</span>
+          )}
         </div>
 
         {/* Last Name */}
         <div className="flex flex-col">
-          <label className="text-sm font-medium text-gray-600 mb-1">Last Name</label>
+          <label className="text-sm font-medium text-gray-600 mb-1">
+            Last Name
+          </label>
           <input
             type="text"
             value={lastName}
             onChange={(e) => setLastName(e.target.value)}
             onBlur={(e) => validateField("lastName", e.target.value)}
-            className={`border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none ${errors.lastName ? "border-red-500" : ""}`}
+            className={`border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none ${
+              errors.lastName ? "border-red-500" : ""
+            }`}
           />
-          {errors.lastName && <span className="text-red-500 text-sm">{errors.lastName}</span>}
+          {errors.lastName && (
+            <span className="text-red-500 text-sm">{errors.lastName}</span>
+          )}
         </div>
 
         {/* Email */}
         <div className="flex flex-col">
-          <label className="text-sm font-medium text-gray-600 mb-1">Email</label>
+          <label className="text-sm font-medium text-gray-600 mb-1">
+            Email
+          </label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            disabled={!!userToEdit} // prevent editing email
-            className={`border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none ${errors.email ? "border-red-500" : ""}`}
+            disabled={!!userToEdit}
+            className={`border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none ${
+              errors.email ? "border-red-500" : ""
+            }`}
           />
-          {errors.email && <span className="text-red-500 text-sm">{errors.email}</span>}
+          {errors.email && (
+            <span className="text-red-500 text-sm">{errors.email}</span>
+          )}
         </div>
 
         {/* Phone */}
         <div className="flex flex-col">
-          <label className="text-sm font-medium text-gray-600 mb-1">Phone Number</label>
+          <label className="text-sm font-medium text-gray-600 mb-1">
+            Phone Number
+          </label>
           <input
             type="text"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             onBlur={(e) => validateField("phone", e.target.value)}
-            className={`border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none ${errors.phone ? "border-red-500" : ""}`}
+            className={`border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none ${
+              errors.phone ? "border-red-500" : ""
+            }`}
           />
-          {errors.phone && <span className="text-red-500 text-sm">{errors.phone}</span>}
+          {errors.phone && (
+            <span className="text-red-500 text-sm">{errors.phone}</span>
+          )}
         </div>
 
         {/* Password (only for new users) */}
         {!userToEdit && (
           <div className="flex flex-col col-span-1 md:col-span-2">
-            <label className="text-sm font-medium text-gray-600 mb-1">Password</label>
+            <label className="text-sm font-medium text-gray-600 mb-1">
+              Password
+            </label>
             <div className="flex gap-2">
               <div className="relative flex-1">
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
-                  onChange={(e) => { setPassword(e.target.value); validateField("password", e.target.value); }}
-                  className={`w-full border rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-indigo-400 outline-none ${errors.password ? "border-red-500" : ""}`}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    validateField("password", e.target.value);
+                  }}
+                  className={`w-full border rounded-lg px-3 py-2 pr-10 focus:ring-2 focus:ring-indigo-400 outline-none ${
+                    errors.password ? "border-red-500" : ""
+                  }`}
                 />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700">
-                  {showPassword ? <EyeSlashIcon className="w-5 h-5" /> : <EyeIcon className="w-5 h-5" />}
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                >
+                  {showPassword ? (
+                    <EyeSlashIcon className="w-5 h-5" />
+                  ) : (
+                    <EyeIcon className="w-5 h-5" />
+                  )}
                 </button>
               </div>
-              <button type="button" onClick={generatePassword} className="px-4 py-2 bg-gray-100 border rounded-lg text-sm hover:bg-gray-200 whitespace-nowrap">Generate</button>
+              <button
+                type="button"
+                onClick={generatePassword}
+                className="px-4 py-2 bg-gray-100 border rounded-lg text-sm hover:bg-gray-200 whitespace-nowrap"
+              >
+                Generate
+              </button>
             </div>
-            {errors.password && <span className="text-red-500 text-sm mt-1">{errors.password}</span>}
+            {errors.password && (
+              <span className="text-red-500 text-sm mt-1">
+                {errors.password}
+              </span>
+            )}
           </div>
         )}
 
@@ -282,21 +385,57 @@ const AddUser = ({ closeModal, userToEdit }) => {
             onChange={(e) => setRole(e.target.value)}
             className="border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none"
           >
-            {roles.length === 0 ? <option>Loading roles...</option> : roles.map((r) => <option key={r._id} value={r.roleName}>{roleLabels[r.roleName] || r.roleName}</option>)}
+            {roles.length === 0 ? (
+              <option>Loading roles...</option>
+            ) : (
+              roles.map((r) => (
+                <option key={r._id} value={r.roleName}>
+                  {roleLabels[r.roleName] || r.roleName}
+                </option>
+              ))
+            )}
           </select>
         </div>
 
+        {/* Account Lock (only for editing) */}
+        {userToEdit && (
+          <div className="flex items-center gap-2 col-span-1 md:col-span-2 mt-2">
+            <input
+              type="checkbox"
+              id="accountLock"
+              checked={isLocked}
+              onChange={(e) => setIsLocked(e.target.checked)}
+              className="w-4 h-4"
+            />
+            <label htmlFor="accountLock" className="text-gray-700 text-sm">
+              Account Locked
+            </label>
+          </div>
+        )}
+
         {/* Buttons */}
         <div className="flex items-center gap-4 col-span-1 md:col-span-2 mt-6">
-          <button type="submit" className="bg-indigo-500 text-white px-5 py-2 rounded-lg hover:bg-indigo-700">
+          <button
+            type="submit"
+            className="bg-indigo-500 text-white px-5 py-2 rounded-lg hover:bg-indigo-700"
+          >
             {userToEdit ? "Update User" : "Add User"}
           </button>
-          <button type="button" onClick={resetForm} className="bg-gray-200 text-gray-700 px-5 py-2 rounded-lg hover:bg-gray-300">Reset</button>
+          <button
+            type="button"
+            onClick={resetForm}
+            className="bg-gray-200 text-gray-700 px-5 py-2 rounded-lg hover:bg-gray-300"
+          >
+            Reset
+          </button>
         </div>
-
       </form>
 
-      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} />
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+      />
     </div>
   );
 };

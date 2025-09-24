@@ -188,7 +188,7 @@ const handleSubmit = async (e) => {
   e.preventDefault();
   setError("");
 
-  // Validate all fields before submit
+  // ================= Signup Mode =================
   if (mode === "signup") {
     validateFirstName(firstName);
     validateLastName(lastName);
@@ -211,11 +211,14 @@ const handleSubmit = async (e) => {
     }
 
     try {
-      // 1️. Firebase Auth signup
+      // 1️⃣ Firebase Auth signup
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 
-      // 2️. Send user data to backend (MongoDB)
+      // 2️ Get Firebase ID token
+      const idToken = await user.getIdToken();
+
+      // 3️ Send user data to backend (MongoDB)
       const payload = {
         uid: user.uid,
         firstName,
@@ -224,14 +227,22 @@ const handleSubmit = async (e) => {
         email,
         roleName: "user", // default role
       };
+      await axios.post(`${API_URL}/users/signup`, payload, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
 
-      await axios.post(`${API_URL}/users`, payload);
-
-      // 3️. Send email verification
+      // 4️ Send email verification
       await sendEmailVerification(user, {
         url: "http://localhost:3000",
         handleCodeInApp: true,
       });
+
+      // 5️ Store ID token in storage
+      if (rememberMe) {
+        localStorage.setItem("idToken", idToken);
+      } else {
+        sessionStorage.setItem("idToken", idToken);
+      }
 
       toast.success("Registration successful! Please verify your email.");
       setError("Verification email sent. Please check your inbox.");
@@ -257,10 +268,16 @@ const handleSubmit = async (e) => {
         toast.error(err.message);
       }
     }
-  } else {
-    // LOGIN MODE
+  } 
+  
+  // ================= Login Mode =================
+  else {
     try {
-      await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
+      // Set Firebase persistence
+      await setPersistence(
+        auth,
+        rememberMe ? browserLocalPersistence : browserSessionPersistence
+      );
 
       // Firebase login
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
@@ -274,8 +291,13 @@ const handleSubmit = async (e) => {
         return;
       }
 
-      // Fetch user profile from backend
-      const res = await axios.get(`${API_URL}/users/${user.uid}`);
+      // 1️ Get Firebase ID token
+      const idToken = await user.getIdToken();
+
+      // 2️ Fetch user profile from backend
+      const res = await axios.get(`${API_URL}/users/${user.uid}`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
       const userData = res.data;
 
       if (!userData) {
@@ -284,7 +306,14 @@ const handleSubmit = async (e) => {
         return;
       }
 
-      // Check lock status
+      // 3️ Save ID token in storage
+      if (rememberMe) {
+        localStorage.setItem("idToken", idToken);
+      } else {
+        sessionStorage.setItem("idToken", idToken);
+      }
+
+      //4️ Check account lock status
       if (userData.isLocked) {
         if (userData.adminUnlockRequired) toast.error("Account locked. Contact admin.");
         else toast.error("Account temporarily locked. Try later.");
@@ -293,7 +322,7 @@ const handleSubmit = async (e) => {
         return;
       }
 
-      // Save role/session in storage
+      // 5️ Save role/session in storage
       const roleName = (userData.role?.roleName || "user").toLowerCase();
       if (rememberMe) {
         localStorage.setItem("role", roleName);
@@ -303,11 +332,14 @@ const handleSubmit = async (e) => {
         sessionStorage.setItem("isLoggedIn", "true");
       }
 
-      // Reset failedAttempts in backend
-      await axios.put(`${API_URL}/users/${user.uid}/resetAttempts`);
+      // 6️ Reset failedAttempts in backend
+      await axios.put(`${API_URL}/users/${user.uid}/resetAttempts`, null, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
 
       toast.success("Login successful!");
       redirectBasedOnRole(roleName);
+
     } catch (err) {
       console.log(err);
       if (err.code === "auth/too-many-requests") {
@@ -336,6 +368,8 @@ const handleSubmit = async (e) => {
     }
   }
 };
+
+
 
 
   return (

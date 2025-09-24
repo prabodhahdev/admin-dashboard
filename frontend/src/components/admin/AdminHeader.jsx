@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
 import AdminSideNavbar from "./AdminSideNavbar";
+import { useUser } from "../../context/UserContext";
 
-const AdminHeader = ({role}) => {
+const AdminHeader = ({ role }) => {
+  const { currentUser } = useUser();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -12,9 +14,7 @@ const AdminHeader = ({role}) => {
     <>
       {/* Top Navbar */}
       <nav className="fixed top-0 left-0 right-0 z-50 bg-white border-b border-gray-200 shadow-sm px-4 py-2 flex items-center justify-between">
-        {/* Left: Hamburger + Logo */}
         <div className="flex items-center">
-          {/* Hamburger - only on small screens */}
           <button
             className="sm:hidden p-2 mr-2 rounded "
             onClick={toggleSidebar}
@@ -40,7 +40,15 @@ const AdminHeader = ({role}) => {
             alt="Logo"
             className="h-8 mr-2"
           />
-          <span className="font-bold text-xl">LOGO</span>
+          <span className="font-bold text-xl mr-4">LOGO</span>
+
+          {/* Welcome User */}
+          {currentUser && (
+            <span className="text-gray-700 text-sm sm:text-base">
+              Welcome, {currentUser.firstName} {currentUser.lastName} |{" "}
+              {currentUser.role?.roleName || "user"}
+            </span>
+          )}
         </div>
 
         {/* Right side: Notification & Profile */}
@@ -99,14 +107,14 @@ const AdminHeader = ({role}) => {
 
       {/* Sidebar for mobile */}
       {sidebarOpen && (
-        <div className="fixed  inset-0 z-40 flex">
-         {sidebarOpen && (
-        <AdminSideNavbar
-          isOpen={sidebarOpen}
-          onClose={toggleSidebar}
-          role={role}
-        />
-      )}
+        <div className="fixed inset-0 z-40 flex">
+          {sidebarOpen && (
+            <AdminSideNavbar
+              isOpen={sidebarOpen}
+              onClose={toggleSidebar}
+              role={role}
+            />
+          )}
         </div>
       )}
     </>

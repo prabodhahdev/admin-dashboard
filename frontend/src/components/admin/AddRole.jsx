@@ -5,11 +5,16 @@ import "react-toastify/dist/ReactToastify.css";
 const AddRole = ({ closeModal, roleToEdit, refreshRoles }) => {
   const [roleName, setRoleName] = useState("");
   const [description, setDescription] = useState("");
+  const [level, setLevel] = useState(0); 
   const [permissions, setPermissions] = useState({
     manageUsers: false,
     manageRoles: false,
   });
-  const [errors, setErrors] = useState({ roleName: "", description: "" });
+  const [errors, setErrors] = useState({
+    roleName: "",
+    description: "",
+    level: "",
+  });
 
   useEffect(() => {
     if (roleToEdit) {
@@ -18,6 +23,7 @@ const AddRole = ({ closeModal, roleToEdit, refreshRoles }) => {
       setPermissions(
         roleToEdit.permissions || { manageUsers: false, manageRoles: false }
       );
+      setLevel(roleToEdit.level || 0); // Set level when editing
     }
   }, [roleToEdit]);
 
@@ -31,6 +37,9 @@ const AddRole = ({ closeModal, roleToEdit, refreshRoles }) => {
       case "description":
         if (value.length < 5) error = "Description must be at least 5 chars";
         break;
+      case "level":
+        if (value < 0) error = "Level must be 0 or higher";
+        break;
       default:
         break;
     }
@@ -41,21 +50,13 @@ const AddRole = ({ closeModal, roleToEdit, refreshRoles }) => {
   const resetForm = () => {
     setRoleName("");
     setDescription("");
+    setLevel(0); // 🔹 Reset level
     setPermissions({ manageUsers: false, manageRoles: false });
-    setErrors({ roleName: "", description: "" });
+    setErrors({ roleName: "", description: "", level: "" });
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    const isValid =
-      validateField("roleName", roleName) &&
-      validateField("description", description);
-
-    if (!isValid) {
-      toast.error("Please fix errors before submitting.");
-      return;
-    }
 
     try {
       const method = roleToEdit ? "PUT" : "POST";
@@ -66,23 +67,22 @@ const AddRole = ({ closeModal, roleToEdit, refreshRoles }) => {
       const res = await fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ roleName, description, permissions }),
+        body: JSON.stringify({ roleName, description, permissions, level }),
       });
 
+      const data = await res.json();
+
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || "Failed to save role");
+        toast.error(data.error || "Failed to save role");
+        return; 
       }
 
-      toast.success(
-        roleToEdit ? "Role updated successfully!" : "Role added successfully!"
-      );
+      toast.success(roleToEdit ? "Role updated!" : "Role added!"); 
       if (!roleToEdit) resetForm();
-      if (closeModal) closeModal();
-      if (refreshRoles) refreshRoles();
+      closeModal?.(); // close modal on success
     } catch (error) {
       console.error(error);
-      toast.error("Error: " + error.message);
+      toast.error(error.message || "Something went wrong");
     }
   };
 
@@ -139,6 +139,26 @@ const AddRole = ({ closeModal, roleToEdit, refreshRoles }) => {
           )}
         </div>
 
+        {/* Role Level */}
+        <div className="flex flex-col">
+          <label className="text-sm font-medium text-gray-600 mb-1">
+            Role Level
+          </label>
+          <input
+            type="number"
+            value={level}
+            min={1}
+            onChange={(e) => setLevel(parseInt(e.target.value, 10))}
+            onBlur={(e) => validateField("level", e.target.value)}
+            className={`border rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none ${
+              errors.level ? "border-red-500" : ""
+            }`}
+          />
+          {errors.level && (
+            <span className="text-red-500 text-sm">{errors.level}</span>
+          )}
+        </div>
+
         {/* Permissions */}
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-gray-600">
@@ -191,6 +211,11 @@ const AddRole = ({ closeModal, roleToEdit, refreshRoles }) => {
           )}
         </div>
       </form>
+      <ToastContainer
+        position="top-right"
+        autoClose={3000}
+        hideProgressBar={false}
+      />
     </div>
   );
 };
