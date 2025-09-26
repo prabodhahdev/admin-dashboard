@@ -11,22 +11,8 @@ import {
 } from "firebase/auth";
 
 import { auth, db } from "../../firebase/firebase";
-
-import {
-  doc,
-  getDoc,
-  updateDoc,
-  collection,
-  query,
-  where,
-  getDocs,
-} from "firebase/firestore";
 import { toast } from "react-toastify";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/solid";
-
-const LOCK_DURATION = 1 * 60 * 1000; // 1 minutes
-const MAX_FAILED_ATTEMPTS = 2;
-const MAX_LOCKOUTS_PER_DAY = 3;
 
 const AuthForm = ({ mode }) => {
   const navigate = useNavigate();
@@ -112,266 +98,239 @@ const AuthForm = ({ mode }) => {
   // lockUntil: null
   // This ensures the account can log in normally and automatic lock logic works as expected.
 
-  const checkLockStatus = async (userId) => {
-    const userRef = doc(db, "users", userId);
-    const userSnap = await getDoc(userRef);
-
-    if (!userSnap.exists()) return { isLocked: false };
-
-    const userData = userSnap.data();
-    const now = Date.now();
-
-    if (userData.isLocked) {
-      // Check if timeout passed
-      if (
-        userData.lockUntil &&
-        now > userData.lockUntil &&
-        !userData.adminUnlockRequired
-      ) {
-        // auto unlock
-        await updateDoc(userRef, {
-          isLocked: false,
-          failedAttempts: 0,
-          lockUntil: null,
-        });
-        return { isLocked: false };
-      }
-
-      // Still locked
-      return {
-        isLocked: true,
-        adminUnlockRequired: userData.adminUnlockRequired || false,
-      };
-    }
-
-    return { isLocked: false };
-  };
-
-  // ================================ Record Failed Attempt Handling ===================================
-  // Records a failed login attempt, locks account if max attempts reached
-
-  const recordFailedAttempt = async (userId) => {
-    const userRef = doc(db, "users", userId);
-    const userSnap = await getDoc(userRef);
-
-    if (!userSnap.exists()) return;
-    const userData = userSnap.data();
-
-    const newFailed = (userData.failedAttempts || 0) + 1;
-    let update = { failedAttempts: newFailed };
-
-    if (newFailed >= MAX_FAILED_ATTEMPTS) {
-      // apply lock
-      const now = Date.now();
-      const lockouts = (userData.lockoutCount || 0) + 1;
-
-      update = {
-        ...update,
-        isLocked: true,
-        lockUntil: now + LOCK_DURATION,
-        failedAttempts: 0,
-        lockoutCount: lockouts,
-      };
-
-      // If too many lockouts in 24h -> admin unlock required
-      if (lockouts >= MAX_LOCKOUTS_PER_DAY) {
-        update.adminUnlockRequired = true;
-      }
-    }
-
-    await updateDoc(userRef, update);
-  };
 
   // ================================ Form Handling ====================================================
-  // Main submit handler for both login and signup
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  setError("");
+    // ================= Signup Mode =================
+    if (mode === "signup") {
+      validateFirstName(firstName);
+      validateLastName(lastName);
+      validateEmail(email);
+      validatePhone(phone);
+      validatePassword(password);
+      validateConfirmPassword(confirmPassword);
 
-  // ================= Signup Mode =================
-  if (mode === "signup") {
-    validateFirstName(firstName);
-    validateLastName(lastName);
-    validateEmail(email);
-    validatePhone(phone);
-    validatePassword(password);
-    validateConfirmPassword(confirmPassword);
-
-    if (
-      firstNameError ||
-      lastNameError ||
-      emailError ||
-      phoneError ||
-      passwordError ||
-      confirmPasswordError
-    ) {
-      setError("Please fix the errors above");
-      toast.error("Please fix the display errors");
-      return;
-    }
-
-    try {
-      // 1️ Firebase Auth signup
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      // 2️ Get Firebase ID token
-      const idToken = await user.getIdToken();
-
-      // 3️ Send user data to backend (MongoDB)
-      const payload = {
-        uid: user.uid,
-        firstName,
-        lastName,
-        phone,
-        email,
-        roleName: "user", // default role
-      };
-      await axios.post(`${API_URL}/users/signup`, payload, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
-
-      // 4️ Send email verification
-      await sendEmailVerification(user, {
-        url: "http://localhost:3000",
-        handleCodeInApp: true,
-      });
-
-      // 5️ Store ID token in storage
-      if (rememberMe) {
-        localStorage.setItem("idToken", idToken);
-      } else {
-        sessionStorage.setItem("idToken", idToken);
-      }
-
-      toast.success("Registration successful! Please verify your email.");
-      setError("Verification email sent. Please check your inbox.");
-      navigate("/");
-
-      // Clear form
-      setFirstName("");
-      setLastName("");
-      setPhone("");
-      setEmail("");
-      setPassword("");
-      setConfirmPassword("");
-    } catch (err) {
-      console.log(err);
-      if (err.code === "auth/email-already-in-use") {
-        setError("This email is already registered. Please log in or use another email.");
-        toast.error("This email is already registered.");
-      } else if (err.response?.data?.error) {
-        setError(err.response.data.error);
-        toast.error(err.response.data.error);
-      } else {
-        setError(err.message);
-        toast.error(err.message);
-      }
-    }
-  } 
-  
-  // ================= Login Mode =================
-  else {
-    try {
-      // Set Firebase persistence
-      await setPersistence(
-        auth,
-        rememberMe ? browserLocalPersistence : browserSessionPersistence
-      );
-
-      // Firebase login
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-
-      if (!user.emailVerified) {
-        setError("Your email is not verified yet. Please check your inbox or spam folder.");
-        toast.error("Email not verified yet.");
-        setEmail("");
-        setPassword("");
-        return;
-      }
-
-      // 1️ Get Firebase ID token
-      const idToken = await user.getIdToken();
-
-      // 2️ Fetch user profile from backend
-      const res = await axios.get(`${API_URL}/users/${user.uid}`, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
-      const userData = res.data;
-
-      if (!userData) {
-        setError("User profile not found in database.");
-        toast.error("User profile not found.");
-        return;
-      }
-
-      // 3️ Save ID token in storage
-      if (rememberMe) {
-        localStorage.setItem("idToken", idToken);
-      } else {
-        sessionStorage.setItem("idToken", idToken);
-      }
-
-      //4️ Check account lock status
-      if (userData.isLocked) {
-        if (userData.adminUnlockRequired) toast.error("Account locked. Contact admin.");
-        else toast.error("Account temporarily locked. Try later.");
-        setEmail("");
-        setPassword("");
-        return;
-      }
-
-      // 5️ Save role/session in storage
-      const roleName = (userData.role?.roleName || "user").toLowerCase();
-      if (rememberMe) {
-        localStorage.setItem("role", roleName);
-        localStorage.setItem("isLoggedIn", "true");
-      } else {
-        sessionStorage.setItem("role", roleName);
-        sessionStorage.setItem("isLoggedIn", "true");
-      }
-
-      // 6️ Reset failedAttempts in backend
-      await axios.put(`${API_URL}/users/${user.uid}/resetAttempts`, null, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
-
-      toast.success("Login successful!");
-      redirectBasedOnRole(roleName);
-
-    } catch (err) {
-      console.log(err);
-      if (err.code === "auth/too-many-requests") {
-        toast.error("Too many login attempts. Try again later.");
-      } else if (
-        err.code === "auth/user-not-found" ||
-        err.code === "auth/wrong-password" ||
-        err.code === "auth/invalid-credential"
+      if (
+        firstNameError ||
+        lastNameError ||
+        emailError ||
+        phoneError ||
+        passwordError ||
+        confirmPasswordError
       ) {
-        setError("Invalid username or password.");
-        toast.error("Invalid username or password.");
-
-        // Record failed attempt
-        try {
-          await axios.put(`${API_URL}/users/${email}/failedAttempt`);
-        } catch (apiErr) {
-          console.error("Failed to record login attempt:", apiErr);
-        }
-      } else {
-        setError(err.message);
-        toast.error(err.message);
+        setError("Please fix the errors above");
+        toast.error("Please fix the display errors");
+        return;
       }
 
-      setEmail("");
-      setPassword("");
+      try {
+        // 1️ Firebase Auth signup
+        const userCredential = await createUserWithEmailAndPassword(
+          auth,
+          email,
+          password
+        );
+        const user = userCredential.user;
+
+        // 2️ Get Firebase ID token
+        const idToken = await user.getIdToken();
+
+        // 3️ Send user data to backend (MongoDB)
+        const payload = {
+          uid: user.uid,
+          firstName,
+          lastName,
+          phone,
+          email,
+          roleName: "user", // default role
+        };
+        await axios.post(`${API_URL}/users/signup`, payload, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+
+        // 4️ Send email verification
+        await sendEmailVerification(user, {
+          url: "http://localhost:3000",
+          handleCodeInApp: true,
+        });
+
+        // 5️ Store ID token in storage
+        if (rememberMe) {
+          localStorage.setItem("idToken", idToken);
+        } else {
+          sessionStorage.setItem("idToken", idToken);
+        }
+
+        toast.success("Registration successful! Please verify your email.");
+        setError("Verification email sent. Please check your inbox.");
+        navigate("/");
+
+        // Clear form
+        setFirstName("");
+        setLastName("");
+        setPhone("");
+        setEmail("");
+        setPassword("");
+        setConfirmPassword("");
+      } catch (err) {
+        console.log(err);
+        if (err.code === "auth/email-already-in-use") {
+          setError(
+            "This email is already registered. Please log in or use another email."
+          );
+          toast.error("This email is already registered.");
+        } else if (err.response?.data?.error) {
+          setError(err.response.data.error);
+          toast.error(err.response.data.error);
+        } else {
+          setError(err.message);
+          toast.error(err.message);
+        }
+      }
     }
-  }
-};
 
+    // ================= Login Mode =================
+    else {
+      try {
+        let uid;
 
+        // 1️ Try Firebase login to get UID
+        let firebaseUser;
+        try {
+          const tempCred = await signInWithEmailAndPassword(
+            auth,
+            email,
+            password
+          );
+          firebaseUser = tempCred.user;
+          uid = firebaseUser.uid;
+          console.log("[Login] Firebase login success, UID:", uid);
+        } catch (firebaseErr) {
+          console.warn("[Login] Firebase login failed:", firebaseErr.code);
 
+          // If Firebase login fails, fetch UID from backend by email
+          try {
+            const userByEmailRes = await axios.get(
+              `${API_URL}/users/email/${email}`
+            );
+            const userDataByEmail = userByEmailRes.data;
+            if (!userDataByEmail) {
+              toast.error("User not found.");
+              console.log(
+                "[Login] User not found in backend for email:",
+                email
+              );
+              return;
+            }
+            uid = userDataByEmail.uid;
+            console.log("[Login] UID fetched from backend:", uid);
+          } catch (backendErr) {
+            console.error(
+              "[Login] Failed to fetch UID from backend:",
+              backendErr
+            );
+            toast.error("Cannot find user account.");
+            return;
+          }
+        }
+
+        // 2️ Check account lock status
+        const lockRes = await axios.get(`${API_URL}/users/lock-status/${uid}`);
+        const lockData = lockRes.data;
+        console.log("[Login] Lock status:", lockData);
+
+        if (lockData.isLocked) {
+          if (lockData.adminUnlockRequired) {
+            toast.error("Your account is locked. Contact admin.");
+          } else {
+            toast.error("Your account is temporarily locked. Try again later.");
+          }
+          return; // stop login attempt
+        }
+
+        // 3️ Attempt Firebase login if not already successful
+        if (!firebaseUser) {
+          try {
+            const cred = await signInWithEmailAndPassword(
+              auth,
+              email,
+              password
+            );
+            firebaseUser = cred.user;
+            uid = firebaseUser.uid;
+            console.log("[Login] Firebase login success on retry, UID:", uid);
+          } catch (firebaseRetryErr) {
+            console.error(
+              "[Login] Firebase login failed again:",
+              firebaseRetryErr
+            );
+
+            // Record failed attempt in backend
+            try {
+              await axios.put(`${API_URL}/users/${uid}/failedAttempt`);
+              console.log("[Login] Failed attempt recorded for UID:", uid);
+            } catch (apiErr) {
+              console.error("[Login] Failed to record login attempt:", apiErr);
+            }
+
+            // Show proper error toast
+            if (
+              firebaseRetryErr.code === "auth/user-not-found" ||
+              firebaseRetryErr.code === "auth/wrong-password" ||
+              firebaseRetryErr.code === "auth/invalid-credential"
+            ) {
+              toast.error("Invalid username or password.");
+               setEmail("");
+                setPassword("");
+            } else if (firebaseRetryErr.code === "auth/too-many-requests") {
+              toast.error("Too many login attempts. Try again later.");
+            } else {
+              toast.error(firebaseRetryErr.message);
+            }
+            return;
+          }
+        }
+
+        // 4️ Check email verification
+        if (!firebaseUser.emailVerified) {
+          toast.error("Email not verified yet.");
+          return;
+        }
+
+        const idToken = await firebaseUser.getIdToken();
+
+        // 5️ Fetch full profile from MongoDB
+        const profileRes = await axios.get(`${API_URL}/users/${uid}`, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        const userData = profileRes.data;
+
+        if (!userData) {
+          toast.error("User not found in database.");
+          return;
+        }
+
+        // 6️ Reset failed attempts after successful login
+        await axios.put(`${API_URL}/users/${uid}/resetAttempts`, null, {
+          headers: { Authorization: `Bearer ${idToken}` },
+        });
+        console.log("[Login] Failed attempts reset for UID:", uid);
+
+        // 7️ Store ID token
+        if (rememberMe) localStorage.setItem("idToken", idToken);
+        else sessionStorage.setItem("idToken", idToken);
+
+        toast.success("Login successful!");
+        redirectBasedOnRole(userData.role?.roleName?.toLowerCase() || "user");
+      } catch (err) {
+        console.error("[Login] Unexpected error:", err);
+        toast.error(err.response?.data?.error || err.message);
+      }
+    }
+  };
 
   return (
     <div className="auth-form flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4 ">

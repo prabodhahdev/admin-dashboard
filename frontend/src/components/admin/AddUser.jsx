@@ -148,6 +148,47 @@ const AddUser = ({ closeModal, userToEdit }) => {
     validateField("password", randomPass);
   };
 
+  // Add inside AddUser component
+
+  // Function to call admin lock/unlock API
+  const handleAdminLockToggle = async (checked) => {
+    if (!userToEdit) return; // Only for existing users
+    try {
+      const auth = getAuth();
+      const idToken = await auth.currentUser.getIdToken(true);
+
+      const apiUrl = `http://localhost:5000/api/users/admin/${
+        checked ? "lock" : "unlock"
+      }/${userToEdit.uid}`;
+
+      const res = await fetch(apiUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${idToken}`,
+        },
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Operation failed");
+
+      // Update state
+      setIsLocked(data.user.isLocked);
+
+      // Update global user list
+      setUsers((prev) =>
+        prev.map((u) => (u.uid === userToEdit.uid ? data.user : u))
+      );
+
+      toast.success(`User ${checked ? "locked" : "unlocked"} successfully!`);
+    } catch (error) {
+      console.error(error);
+      toast.error("Error: " + error.message);
+      // Revert checkbox if failed
+      setIsLocked((prev) => !prev);
+    }
+  };
+
   // Submit handler
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -398,13 +439,19 @@ const AddUser = ({ closeModal, userToEdit }) => {
         </div>
 
         {/* Account Lock (only for editing) */}
+        {/* Account Lock (only for editing) */}
+        {/* Account Lock (only for editing) */}
         {userToEdit && (
           <div className="flex items-center gap-2 col-span-1 md:col-span-2 mt-2">
             <input
               type="checkbox"
               id="accountLock"
               checked={isLocked}
-              onChange={(e) => setIsLocked(e.target.checked)}
+              onChange={(e) => {
+                const checked = e.target.checked;
+                setIsLocked(checked);
+                handleAdminLockToggle(checked); // call API on toggle
+              }}
               className="w-4 h-4"
             />
             <label htmlFor="accountLock" className="text-gray-700 text-sm">

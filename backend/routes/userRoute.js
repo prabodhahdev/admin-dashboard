@@ -1,6 +1,6 @@
 // backend/routes/userRoute.js
 import express from "express";
-import { createUser, getUsers, getUserByEmail, getUserByUid, resetFailedAttempts, updateUser, deleteUser, signupUser, getManageableUsers, toggleAccountLock, updateProfile, failedAttempt } from "../controllers/userController.js";
+import { createUser, getUsers, getUserByEmail, getUserByUid, resetFailedAttempts, updateUser, deleteUser, signupUser, getManageableUsers, toggleAccountLock, updateProfile, failedAttempt, checkLockStatusByUid, adminLockAccount, adminUnlockAccount } from "../controllers/userController.js";
 import { authMiddleware } from "../middleware/authMiddlware.js";
 import { checkLock } from "../middleware/checkAccountLock.js";
 
@@ -18,7 +18,15 @@ router.delete("/:uid", authMiddleware,checkLock,deleteUser);
 router.put("/:uid/unlock", authMiddleware, checkLock,toggleAccountLock);
 router.put("/profile/:uid", authMiddleware, checkLock,updateProfile);
 
+router.get("/lock-status/:uid", checkLockStatusByUid); 
+
 router.put("/:uid/failedAttempt", failedAttempt);
+
+// Lock account
+router.put("/admin/lock/:uid", authMiddleware, adminLockAccount);
+
+// Unlock account
+router.put("/admin/unlock/:uid", authMiddleware, adminUnlockAccount);
 
 
 export default router;

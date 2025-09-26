@@ -18,6 +18,8 @@ import ProfilePage from "./pages/user/ProfilePage";
 function App() {
   return (
     <>
+          <ToastContainer position="top-right" autoClose={3000} />
+
       <Routes>
         <Route path="/" element={<LoginPage />} />
         <Route path="/action" element={<ActionHandler />} />
@@ -70,7 +72,6 @@ function App() {
         
       </Routes>
 
-      <ToastContainer position="top-right" autoClose={3000} />
     </>
   );
 }

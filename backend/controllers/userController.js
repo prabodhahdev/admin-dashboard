@@ -229,35 +229,6 @@ export const getUserByEmail = async (req, res) => {
   }
 };
 
-// Reset failed attempts
-export const resetFailedAttempts = async (req, res) => {
-  try {
-    const { uid } = req.params;
-
-    // Find user
-    const user = await User.findOne({ uid });
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    // Reset fields
-    user.failedAttempts = 0;
-    user.isLocked = false;
-    user.lockUntil = null;
-    user.adminUnlockRequired = false;
-
-    await user.save();
-
-    // Optionally, return updated user info
-    const populatedUser = await User.findById(user._id).populate("role", "roleName level permissions");
-
-    res.json({
-      message: "Failed attempts reset successfully",
-      user: populatedUser,
-    });
-  } catch (err) {
-    console.error("Error resetting failed attempts:", err);
-    res.status(500).json({ error: err.message });
-  }
-};
 
 // Update user based on roles [manage users]
 export const updateUser = async (req, res) => {
@@ -466,30 +437,153 @@ export const updateProfile = async (req, res) => {
 };
 
 
+const LOCK_DURATION = 1 * 60 * 1000; // 1 minute
+const MAX_FAILED_ATTEMPTS = 2;
+const MAX_LOCKOUTS_PER_DAY = 3;
+
 export const failedAttempt = async (req, res) => {
   try {
     const { uid } = req.params;
     const user = await User.findOne({ uid });
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    let failedAttempts = (user.failedAttempts || 0) + 1;
-    let update = { failedAttempts };
+    // Increment failed attempts
+    user.failedAttempts = (user.failedAttempts || 0) + 1;
 
-    const now = Date.now();
+    // Check if failed attempts reach max
+    if (user.failedAttempts >= MAX_FAILED_ATTEMPTS) {
+      user.isLocked = true;
+      user.lockUntil = Date.now() + LOCK_DURATION;
+      user.failedAttempts = 0; // reset for next round
+      user.lockedCount = (user.lockedCount || 0) + 1;
 
-    if (failedAttempts >= 2) { // MAX_FAILED_ATTEMPTS
-      update.isLocked = true;
-      update.lockUntil = now + 1 * 60 * 1000; // 1 min
-      update.failedAttempts = 0;
-      update.lockoutCount = (user.lockoutCount || 0) + 1;
-
-      if (update.lockoutCount >= 3) { // MAX_LOCKOUTS_PER_DAY
-        update.adminUnlockRequired = true;
+      if (user.lockedCount >= MAX_LOCKOUTS_PER_DAY) {
+        user.adminUnlockRequired = true;
       }
     }
 
-    await User.updateOne({ uid }, { $set: update });
-    res.json({ success: true, update });
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Failed attempt recorded",
+      isLocked: user.isLocked,
+      adminUnlockRequired: user.adminUnlockRequired,
+      failedAttempts: user.failedAttempts,
+      lockUntil: user.lockUntil,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+// Check lock status by UID
+export const checkLockStatusByUid = async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const user = await User.findOne({ uid });
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    const now = Date.now();
+
+    // Auto-unlock if lock duration passed and admin unlock is not required
+    if (user.isLocked && user.lockUntil && now > user.lockUntil && !user.adminUnlockRequired) {
+      user.isLocked = false;
+      user.lockUntil = null;
+      await user.save();
+    }
+
+    res.json({
+      isLocked: user.isLocked,
+      adminUnlockRequired: user.adminUnlockRequired,
+      lockUntil: user.lockUntil,
+      failedAttempts: user.failedAttempts,
+      lockedCount: user.lockedCount,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+// 3️ Reset failed attempts and unlock account after successful login
+export const resetFailedAttempts = async (req, res) => {
+  try {
+    const { uid } = req.params;
+
+    const user = await User.findOneAndUpdate(
+      { uid },
+      {
+        $set: {
+          failedAttempts: 0,
+          isLocked: false,
+          lockUntil: null,
+          lockedCount:0,
+          adminUnlockRequired: false, 
+        },
+      },
+      { new: true }
+    );
+
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    res.json({ success: true, message: "Account unlocked and failed attempts reset", user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+// 1️⃣ Admin Lock Account
+export const adminLockAccount = async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const user = await User.findOneAndUpdate(
+      { uid },
+      {
+        $set: {
+          isLocked: true,
+          adminUnlockRequired: true,
+          failedAttempts: 0,
+          lockedCount: 0,
+          lockUntil: null,
+        },
+      },
+      { new: true }
+    );
+
+    if (!user) return res.status(404).json({ error: "User not found" });
+    res.json({ success: true, user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// 2️⃣ Admin Unlock Account
+export const adminUnlockAccount = async (req, res) => {
+  try {
+    const { uid } = req.params;
+    const user = await User.findOneAndUpdate(
+      { uid },
+      {
+        $set: {
+          isLocked: false,
+          adminUnlockRequired: false,
+          failedAttempts: 0,
+          lockedCount: 0,
+          lockUntil: null,
+        },
+      },
+      { new: true }
+    );
+
+    if (!user) return res.status(404).json({ error: "User not found" });
+    res.json({ success: true, user });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
