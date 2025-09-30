@@ -15,6 +15,7 @@ const userSchema = new mongoose.Schema(
     failedAttempts: { type: Number, default: 0 },
     lockUntil: { type: Number, default: null },
     adminUnlockRequired: { type: Boolean, default: false },
+    isDeleted: { type: Boolean, default: false }, 
   },
   { timestamps: true } 
 );

@@ -45,57 +45,56 @@ export const UserProvider = ({ children }) => {
     }
   };
 
-  // Fetch all users
+  // Fetch all users (active only, backend filters isDeleted)
   const fetchUsers = async () => {
     try {
       const res = await axios.get(`${API_URL}/users`);
-      setUsers(res.data);
+      setUsers(res.data); // backend already excludes soft-deleted users
     } catch (err) {
       console.error("Failed to fetch users:", err);
     }
   };
 
-  // Fetch current user and handle account lock
- const fetchCurrentUser = async (uid) => {
-  try {
-    const idToken = await auth.currentUser.getIdToken(true);
-    const res = await axios.get(`${API_URL}/users/${uid}`, {
-      headers: { Authorization: `Bearer ${idToken}` },
-    });
+  // Fetch current user and handle account lock / soft delete
+  const fetchCurrentUser = async (uid) => {
+    try {
+      const idToken = await auth.currentUser.getIdToken(true);
+      const res = await axios.get(`${API_URL}/users/${uid}`, {
+        headers: { Authorization: `Bearer ${idToken}` },
+      });
 
-    const user = res.data;
+      const user = res.data;
 
-    // Immediate logout if backend reports account locked
-    if (user.isLocked) {
-      toast.error("Your account has been locked. Logging out...");
-      await logout();
-      return;
+      // 🔹 Immediate logout if account locked or soft-deleted
+      if (user.isLocked || user.isDeleted) {
+        toast.error(
+          user.isDeleted
+            ? "Your account has been deleted. Logging out..."
+            : "Your account has been locked. Logging out..."
+        );
+        await logout();
+        return;
+      }
+
+      const role = user.role || { roleName: "user", permissions: {} };
+      setCurrentUser({ ...user, role, permissions: role.permissions || {} });
+
+      if (role.permissions.manageUsers) await fetchUsers();
+      await fetchRoles();
+    } catch (err) {
+      console.error("Error fetching current user:", err);
+
+      if (err.response?.status === 403 || err.response?.status === 401) {
+        await logout();
+      } else {
+        setCurrentUser(null);
+      }
+    } finally {
+      setLoading(false);
     }
+  };
 
-    const role = user.role || { roleName: "user", permissions: {} };
-    setCurrentUser({ ...user, role, permissions: role.permissions || {} });
-
-    if (role.permissions.manageUsers) await fetchUsers();
-    await fetchRoles();
-  } catch (err) {
-    console.error("Error fetching current user:", err);
-
-    // If backend returns 403, logout and redirect
-    if (err.response?.status === 403) {
-      toast.error(err.response.data.error || "Account locked");
-      await logout();
-    } else if (err.response?.status === 401) {
-      await logout();
-    } else {
-      setCurrentUser(null);
-    }
-  } finally {
-    setLoading(false);
-  }
-};
-
-
-  // Real-time lock check every 5 seconds (optional)
+  // Real-time lock & soft-delete check every 5 seconds
   useEffect(() => {
     const interval = setInterval(async () => {
       if (currentUser && auth.currentUser) {
@@ -105,12 +104,16 @@ export const UserProvider = ({ children }) => {
             headers: { Authorization: `Bearer ${idToken}` },
           });
 
-          if (res.data.isLocked) {
-            toast.error("Your account has been locked. Logging out...");
+          if (res.data.isLocked || res.data.isDeleted) {
+            toast.error(
+              res.data.isDeleted
+                ? "Your account has been deleted. Logging out..."
+                : "Your account has been locked. Logging out..."
+            );
             await logout();
           }
         } catch (err) {
-          console.error("Error checking lock status:", err);
+          console.error("Error checking lock/delete status:", err);
         }
       }
     }, 5000);

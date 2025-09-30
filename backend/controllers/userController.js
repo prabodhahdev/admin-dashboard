@@ -169,7 +169,7 @@ export const getUserByUid = async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const user = await User.findOne({ uid }).populate("role");
+    const user = await User.findOne({ uid , isDeleted: false  }).populate("role");
     if (!user) {
       return res.status(404).json({ error: "User not found" });
     }
@@ -199,7 +199,7 @@ export const getUserByUid = async (req, res) => {
 // Get all users with role
 export const getUsers = async (req, res) => {
   try {
-    const users = await User.find().populate("role", "roleName permissions level");
+    const users = await User.find({ isDeleted: false }).populate("role", "roleName permissions level");
 
     // Convert users to plain objects for response
     const usersList = users.map((user) => user.toObject());
@@ -215,7 +215,7 @@ export const getUsers = async (req, res) => {
 export const getUserByEmail = async (req, res) => {
   try {
     const { email } = req.params;
-    const user = await User.findOne({ email }).populate(
+    const user = await User.findOne({ email , isDeleted: false }).populate(
       "role",
       "roleName permissions"
     );
@@ -304,66 +304,11 @@ export const updateUser = async (req, res) => {
   }
 };
 
-// Delete user
-export const deleteUser = async (req, res) => {
-  try {
-    const { uid } = req.params;
-
-    // ------------------------------
-    // 1️ Find the user in MongoDB
-    // ------------------------------
-    const user = await User.findOne({ uid }).populate("role");
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    // ------------------------------
-    // 2️ Get current logged-in user
-    // ------------------------------
-    const currentUser = await User.findById(req.user._id).populate("role");
-    if (!currentUser || !currentUser.role) {
-      return res.status(403).json({ error: "Current user role not found" });
-    }
-
-    // ------------------------------
-    // 3️ Role-level enforcement
-    // Cannot delete users with equal or higher role level
-    // ------------------------------
-    if (user.role.level <= currentUser.role.level) {
-      return res.status(403).json({
-        error: "Cannot delete a user with equal or higher role level",
-      });
-    }
-
-    // ------------------------------
-    // 4️ Delete user in Firebase
-    // ------------------------------
-    try {
-      await admin.auth().deleteUser(uid);
-      console.log("Firebase user deleted:", uid);
-    } catch (firebaseErr) {
-      console.error("Error deleting Firebase user:", firebaseErr);
-      return res.status(500).json({
-        error: "Failed to delete user in Firebase",
-        details: firebaseErr.message,
-      });
-    }
-
-    // ------------------------------
-    // 5️ Delete user in MongoDB
-    // ------------------------------
-    await User.deleteOne({ uid });
-    console.log("MongoDB user deleted:", uid);
-
-    res.json({ message: "User deleted successfully" });
-  } catch (err) {
-    console.error("Error deleting user:", err);
-    res.status(500).json({ error: err.message, code: err.code || "SERVER_ERROR" });
-  }
-};
 
 // Get manageable users based on role level
 export const getManageableUsers = async (req, res) => {
   try {
-    const currentUser = req.user; // set by authMiddleware
+    const currentUser = req.user; 
     if (!currentUser || !currentUser.role) {
       return res.status(403).json({ error: "Current user role not found" });
     }
@@ -371,7 +316,7 @@ export const getManageableUsers = async (req, res) => {
     const currentLevel = currentUser.role.level;
 
     // Fetch users with role info
-    const allUsers = await User.find().populate("role", "roleName permissions level");
+    const allUsers = await User.find({isDeleted: false }).populate("role", "roleName permissions level");
 
     // Filter users based on level
     const manageableUsers = allUsers.filter(user => {
@@ -396,7 +341,7 @@ export const toggleAccountLock = async (req, res) => {
 
     if (lock) {
       user.isLocked = true;
-      user.adminUnlockRequired = true; // optional: require admin to unlock next time
+      user.adminUnlockRequired = true; // require admin to unlock next time
     } else {
       user.isLocked = false;
       user.adminUnlockRequired = false;
@@ -538,7 +483,7 @@ export const resetFailedAttempts = async (req, res) => {
 };
 
 
-// 1️⃣ Admin Lock Account
+// 1️ Admin Lock Account
 export const adminLockAccount = async (req, res) => {
   try {
     const { uid } = req.params;
@@ -564,7 +509,7 @@ export const adminLockAccount = async (req, res) => {
   }
 };
 
-// 2️⃣ Admin Unlock Account
+// 2️ Admin Unlock Account
 export const adminUnlockAccount = async (req, res) => {
   try {
     const { uid } = req.params;
@@ -586,6 +531,69 @@ export const adminUnlockAccount = async (req, res) => {
     res.json({ success: true, user });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+
+// Soft Delete User (disable + isDeleted)
+export const deleteUser = async (req, res) => {
+  try {
+    const { uid } = req.params;
+
+    // 1️ Find the user in MongoDB
+    const user = await User.findOne({ uid }).populate("role");
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    // 2️ Get current logged-in user
+    const currentUser = await User.findById(req.user._id).populate("role");
+    if (!currentUser || !currentUser.role) {
+      return res.status(403).json({ error: "Current user role not found" });
+    }
+
+    // 3️ Role-level enforcement
+    if (user.role.level <= currentUser.role.level) {
+      return res.status(403).json({
+        error: "Cannot delete a user with equal or higher role level",
+      });
+    }
+
+    // 4️ Disable user in Firebase (instead of delete)
+    await admin.auth().updateUser(uid, { disabled: true });
+    console.log("Firebase user disabled:", uid);
+
+    // 5️ Soft delete in MongoDB
+    user.isDeleted = true;
+    user.deletedAt = new Date();
+    await user.save();
+
+    res.json({ message: "User disabled + deleted successfully" });
+  } catch (err) {
+    console.error("Error disabling user:", err);
+    res.status(500).json({ error: err.message });
+  }
+};
+
+// Restore Soft Deleted User
+export const restoreUser = async (req, res) => {
+  try {
+    const { uid } = req.params;
+
+    // 1️ Enable user in Firebase
+    await admin.auth().updateUser(uid, { disabled: false });
+
+    // 2️ Update MongoDB
+    const user = await User.findOneAndUpdate(
+      { uid },
+      { isDeleted: false, deletedAt: null },
+      { new: true }
+    ).populate("role");
+
+    if (!user) return res.status(404).json({ error: "User not found" });
+
+    res.json({ message: "User restored successfully", user });
+  } catch (err) {
+    console.error("Error restoring user:", err);
     res.status(500).json({ error: err.message });
   }
 };

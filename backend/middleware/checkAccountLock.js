@@ -1,6 +1,6 @@
 // backend/middleware/checkLock.js
 export const checkLock = (req, res, next) => {
-  const user = req.user; // assuming user is already decoded from token
+  const user = req.user; 
   if (!user) return res.status(401).json({ error: "Unauthorized" });
 
   if (user.isLocked) {

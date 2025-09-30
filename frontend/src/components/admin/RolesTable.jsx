@@ -1,16 +1,28 @@
 // src/components/admin/RolesTable.jsx
 import React, { useState, useEffect } from "react";
-import { PencilIcon, TrashIcon, UserPlusIcon, MagnifyingGlassIcon } from "@heroicons/react/24/solid";
-import AddRole from "./AddRole"; 
+import {
+  PencilIcon,
+  TrashIcon,
+  UserPlusIcon,
+  MagnifyingGlassIcon,
+} from "@heroicons/react/24/solid";
+import AddRole from "./AddRole";
 import { toast } from "react-toastify";
+import { useUser } from "../../context/UserContext";
 
-const TABLE_HEAD = ["Role Name", "Description", "Permissions", "Role Level", "Actions"];
+const TABLE_HEAD = [
+  "Role Name",
+  "Description",
+  "Permissions",
+  "Role Level",
+  "Actions",
+];
 
 const RolesTable = () => {
+  const { users } = useUser(); // get all users from context
   const [roles, setRoles] = useState([]);
   const [search, setSearch] = useState("");
-  const [modalRole, setModalRole] = useState(false); 
-
+  const [modalRole, setModalRole] = useState(false);
   const API_URL = "http://localhost:5000/api/roles";
 
   // Delete role
@@ -19,16 +31,18 @@ const RolesTable = () => {
 
     try {
       const res = await fetch(`${API_URL}/${roleId}`, { method: "DELETE" });
+
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || "Failed to delete role");
+        const message = errData.error || "Failed to delete role";
+        throw new Error(message);
       }
 
-      setRoles(prev => prev.filter(r => r._id !== roleId));
+      setRoles((prev) => prev.filter((r) => r._id !== roleId));
       toast.success("Role deleted successfully!");
     } catch (err) {
       console.error("Error deleting role:", err);
-      toast.error("Error deleting role: " + err.message);
+      toast.error(err.message);
     }
   };
 
@@ -52,11 +66,12 @@ const RolesTable = () => {
     return (
       role.roleName.toLowerCase().includes(searchLower) ||
       role.description?.toLowerCase().includes(searchLower) ||
-      String(role.level || "").toLowerCase().includes(searchLower) 
+      String(role.level || "")
+        .toLowerCase()
+        .includes(searchLower)
     );
   });
 
-  // Handle edit click
   const handleEditClick = (role) => {
     setModalRole(role);
   };
@@ -66,14 +81,17 @@ const RolesTable = () => {
       {/* Header */}
       <div className="flex flex-col md:flex-row justify-between mb-6 items-center gap-4">
         <div>
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-500">Roles List</h2>
-          <p className="text-gray-500 text-sm sm:text-base">See information about all roles</p>
+          <h2 className="text-lg sm:text-xl font-semibold text-gray-500">
+            Roles List
+          </h2>
+          <p className="text-gray-500 text-sm sm:text-base">
+            See information about all roles
+          </p>
         </div>
 
-        {/* Add Role Button */}
         <button
           className="flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded hover:bg-blue-700 text-sm"
-          onClick={() => setModalRole(null)} 
+          onClick={() => setModalRole(null)}
         >
           <UserPlusIcon className="h-5 w-5" /> Add Role
         </button>
@@ -111,10 +129,22 @@ const RolesTable = () => {
           <tbody>
             {filteredRows.map((role, idx) => {
               const isSuperAdmin = role.roleName === "superadmin";
+              // Check if any user is assigned to this role (and not soft-deleted)
+              const isAssigned = users.some(
+                (user) => user.role?._id === role._id && !user.isDeleted
+              );
+
               return (
-                <tr key={role._id} className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}>
-                  <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">{role.roleName}</td>
-                  <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">{role.description}</td>
+                <tr
+                  key={role._id}
+                  className={idx % 2 === 0 ? "bg-white" : "bg-gray-50"}
+                >
+                  <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">
+                    {role.roleName}
+                  </td>
+                  <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">
+                    {role.description}
+                  </td>
                   <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">
                     {role.permissions
                       ? Object.keys(role.permissions)
@@ -122,19 +152,39 @@ const RolesTable = () => {
                           .join(", ")
                       : "-"}
                   </td>
-                  <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">{role.level || "-"}</td>
+                  <td className="p-2 sm:p-3 text-xs sm:text-sm text-gray-700">
+                    {role.level || "-"}
+                  </td>
                   <td className="p-2 sm:p-3 flex gap-2">
                     <button
-                      className={`text-gray-500 hover:text-gray-700 ${isSuperAdmin ? "opacity-50 cursor-not-allowed" : ""}`}
+                      className={`text-gray-500 hover:text-gray-700 ${
+                        isSuperAdmin ? "opacity-50 cursor-not-allowed" : ""
+                      }`}
                       onClick={() => !isSuperAdmin && handleEditClick(role)}
                       disabled={isSuperAdmin}
                     >
                       <PencilIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                     </button>
                     <button
-                      className={`text-red-500 hover:text-red-700 ${isSuperAdmin ? "opacity-50 cursor-not-allowed" : ""}`}
-                      onClick={() => !isSuperAdmin && handleDeleteClick(role._id)}
-                      disabled={isSuperAdmin}
+                      className={`text-red-500 hover:text-red-700 ${
+                        isSuperAdmin || isAssigned
+                          ? "opacity-50 cursor-not-allowed"
+                          : ""
+                      }`}
+                      onClick={() =>
+                        !isSuperAdmin &&
+                        !isAssigned &&
+                        handleDeleteClick(role._id)
+                      }
+                      disabled={isSuperAdmin || isAssigned}
+                      title={
+                        isAssigned
+                          ? `Cannot delete: assigned to ${
+                              users.filter((u) => u.role?._id === role._id)
+                                .length
+                            } users`
+                          : ""
+                      }
                     >
                       <TrashIcon className="h-4 w-4 sm:h-5 sm:w-5" />
                     </button>
@@ -153,7 +203,7 @@ const RolesTable = () => {
             roleToEdit={modalRole}
             closeModal={() => {
               setModalRole(false);
-              fetchRoles(); 
+              fetchRoles();
             }}
           />
         </div>

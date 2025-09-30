@@ -25,7 +25,7 @@ const AddUser = ({ closeModal, userToEdit }) => {
     phone: "",
     password: "",
   });
-  const [isLocked, setIsLocked] = useState(false); // <-- account lock state
+  const [isLocked, setIsLocked] = useState(false);
 
   const roleLabels = {
     user: "User",
@@ -95,7 +95,7 @@ const AddUser = ({ closeModal, userToEdit }) => {
       password: "",
     });
     setRole(roles[0]?.roleName || "user");
-    setIsLocked(false); // reset lock status
+    setIsLocked(false); 
   };
 
   // Fetch roles
@@ -108,7 +108,7 @@ const AddUser = ({ closeModal, userToEdit }) => {
         const currentLevel = currentUser?.role?.level ?? 0;
         const isSuperAdmin = currentUser?.role?.roleName === "superadmin";
 
-        // 🔹 Role filtering based on current user
+        // Role filtering based on current user
         data = data.filter((r) => {
           if (isSuperAdmin) return true;
           if (userToEdit && r.roleName === userToEdit.role?.roleName)
@@ -136,8 +136,8 @@ const AddUser = ({ closeModal, userToEdit }) => {
       setPhone(userToEdit.phone);
       setProfilePic(userToEdit.profilePic || null);
       setRole(userToEdit.role?.roleName || "user");
-      setPassword(""); // password optional
-      setIsLocked(userToEdit.isLocked || false); // <-- populate lock state
+      setPassword("");
+      setIsLocked(userToEdit.isLocked || false);
     }
   }, [userToEdit]);
 
@@ -148,11 +148,9 @@ const AddUser = ({ closeModal, userToEdit }) => {
     validateField("password", randomPass);
   };
 
-  // Add inside AddUser component
-
   // Function to call admin lock/unlock API
   const handleAdminLockToggle = async (checked) => {
-    if (!userToEdit) return; // Only for existing users
+    if (!userToEdit) return; 
     try {
       const auth = getAuth();
       const idToken = await auth.currentUser.getIdToken(true);
@@ -216,7 +214,7 @@ const AddUser = ({ closeModal, userToEdit }) => {
       const method = userToEdit ? "PUT" : "POST";
 
       const bodyData = userToEdit
-        ? { firstName, lastName, phone, profilePic, roleName: role, isLocked } // include lock status
+        ? { firstName, lastName, phone, profilePic, roleName: role, isLocked }
         : {
             firstName,
             lastName,
@@ -429,17 +427,21 @@ const AddUser = ({ closeModal, userToEdit }) => {
             {roles.length === 0 ? (
               <option>Loading roles...</option>
             ) : (
-              roles.map((r) => (
-                <option key={r._id} value={r.roleName}>
-                  {roleLabels[r.roleName] || r.roleName}
-                </option>
-              ))
+              roles.map((r) => {
+                const displayName =
+                  roleLabels[r.roleName] ||
+                  r.roleName.charAt(0).toUpperCase() +
+                    r.roleName.slice(1).toLowerCase();
+                return (
+                  <option key={r._id} value={r.roleName}>
+                    {displayName}
+                  </option>
+                );
+              })
             )}
           </select>
         </div>
 
-        {/* Account Lock (only for editing) */}
-        {/* Account Lock (only for editing) */}
         {/* Account Lock (only for editing) */}
         {userToEdit && (
           <div className="flex items-center gap-2 col-span-1 md:col-span-2 mt-2">
@@ -450,7 +452,7 @@ const AddUser = ({ closeModal, userToEdit }) => {
               onChange={(e) => {
                 const checked = e.target.checked;
                 setIsLocked(checked);
-                handleAdminLockToggle(checked); // call API on toggle
+                handleAdminLockToggle(checked);
               }}
               className="w-4 h-4"
             />

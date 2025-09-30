@@ -136,9 +136,20 @@ export const deleteRole = async (req, res) => {
       return res.status(400).json({ error: "Cannot delete SuperAdmin" });
     }
 
+    // Check if any user is assigned this role
+    const usersWithRole = await User.find({ role: role._id, isDeleted: false });
+    if (usersWithRole.length > 0) {
+      return res.status(400).json({
+        error: `Cannot delete this role. It is assigned to ${usersWithRole.length} user(s).`,
+      });
+    }
+
+    // Safe to delete
     await Role.findByIdAndDelete(id);
     res.json({ message: "Role deleted successfully" });
   } catch (err) {
+    console.error(err);
     res.status(500).json({ error: err.message });
   }
 };
+

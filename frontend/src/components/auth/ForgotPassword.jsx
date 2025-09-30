@@ -31,8 +31,10 @@ const ForgotPassword = () => {
     setLoading(true);
 
     try {
-      // 1️⃣ Check if email exists in database
-      const res = await axios.get(`${API_URL}/users/email/${encodeURIComponent(email)}`);
+      // 1️ Check if email exists in database
+      const res = await axios.get(
+        `${API_URL}/users/email/${encodeURIComponent(email)}`
+      );
       const user = res.data;
 
       if (!user) {
@@ -41,7 +43,7 @@ const ForgotPassword = () => {
         return;
       }
 
-      // 2️⃣ Send password reset email via Firebase
+      // 2️ Send password reset email via Firebase
       await sendPasswordResetEmail(auth, email, {
         url: "http://localhost:3000/reset-password", // redirect URL after reset
         handleCodeInApp: true,

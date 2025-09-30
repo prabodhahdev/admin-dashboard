@@ -5,12 +5,9 @@ import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
   signInWithEmailAndPassword,
-  setPersistence,
-  browserLocalPersistence,
-  browserSessionPersistence,
 } from "firebase/auth";
 
-import { auth, db } from "../../firebase/firebase";
+import { auth } from "../../firebase/firebase";
 import { toast } from "react-toastify";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/solid";
 
@@ -97,7 +94,6 @@ const AuthForm = ({ mode }) => {
   // failedAttempts: 0
   // lockUntil: null
   // This ensures the account can log in normally and automatic lock logic works as expected.
-
 
   // ================================ Form Handling ====================================================
   const handleSubmit = async (e) => {
@@ -283,8 +279,8 @@ const AuthForm = ({ mode }) => {
               firebaseRetryErr.code === "auth/invalid-credential"
             ) {
               toast.error("Invalid username or password.");
-               setEmail("");
-                setPassword("");
+              setEmail("");
+              setPassword("");
             } else if (firebaseRetryErr.code === "auth/too-many-requests") {
               toast.error("Too many login attempts. Try again later.");
             } else {
@@ -338,7 +334,7 @@ const AuthForm = ({ mode }) => {
         <h2 className="text-xl text-center font-semibold mb-6 text-gray-500 ">
           {mode === "signup"
             ? "Let's get your account set up"
-            : "Login to your account"}
+            : "Log in to your account"}
         </h2>
 
         <form
@@ -432,9 +428,9 @@ const AuthForm = ({ mode }) => {
               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-500"
             >
               {showPassword ? (
-                <EyeSlashIcon className="w-4 h-4" />
-              ) : (
                 <EyeIcon className="w-4 h-4" />
+              ) : (
+                <EyeSlashIcon className="w-4 h-4" />
               )}
             </button>
           </div>
@@ -489,9 +485,9 @@ const AuthForm = ({ mode }) => {
                 onMouseLeave={() => setShowConfirmPassword(false)}
               >
                 {showConfirmPassword ? (
-                  <EyeSlashIcon className="w-4 h-4" />
-                ) : (
                   <EyeIcon className="w-4 h-4" />
+                ) : (
+                  <EyeSlashIcon className="w-4 h-4" />
                 )}
               </button>
             </div>

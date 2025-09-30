@@ -4,6 +4,7 @@ import { useUser } from "../../context/UserContext";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { getAuth, onAuthStateChanged } from "firebase/auth";
+import ChangePassword from "../auth/ChangePassword";
 
 const Profile = () => {
   const { currentUser, setCurrentUser } = useUser();
@@ -18,6 +19,7 @@ const Profile = () => {
   const [previewPic, setPreviewPic] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   // Track Firebase user
   useEffect(() => {
@@ -75,10 +77,10 @@ const Profile = () => {
     setLoading(true);
     try {
       const API_URL = process.env.REACT_APP_API_URL;
-      const token = await firebaseUser.getIdToken(); // Firebase token
+      const token = await firebaseUser.getIdToken();
 
       const res = await axios.put(
-        `${API_URL}/users/profile/${currentUser.uid}`, // pass UID
+        `${API_URL}/users/profile/${currentUser.uid}`,
         {
           firstName: formData.firstName,
           lastName: formData.lastName,
@@ -90,7 +92,7 @@ const Profile = () => {
         }
       );
 
-      setCurrentUser(res.data.user); // update MongoDB user
+      setCurrentUser(res.data.user);
       toast.success("Profile updated successfully!");
       setIsEditing(false);
     } catch (err) {
@@ -126,6 +128,15 @@ const Profile = () => {
             </button>
           )}
         </div>
+        <p
+          onClick={() => setShowChangePassword(true)}
+          className="text-indigo-600 cursor-pointer mb-4 underline w-max"
+        >
+          Change Password
+        </p>
+        {showChangePassword && (
+          <ChangePassword onClose={() => setShowChangePassword(false)} />
+        )}
 
         {/* Profile Picture */}
         <div className="flex items-center gap-4 mb-6">
